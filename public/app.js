@@ -6,6 +6,7 @@ import {
 import { firebaseConfig } from "./firebase-config.js";
 import { CATEGORIES, DEFAULT_ORDER, categoryById, classify, normalizeOrder, setLearned, rememberLocally, learnKey } from "./categories.js";
 import { parseItems, splitQty, splitSpoken } from "./parse.js";
+import { icon } from "./icons.js";
 
 const $ = (id) => document.getElementById(id);
 const statusEl = $("status");
@@ -72,14 +73,24 @@ let collapsed = new Set();
 try { collapsed = new Set(JSON.parse(localStorage.getItem("collapsed") || "[]")); } catch {}
 try { me = localStorage.getItem("me") || ""; } catch {}
 
+// A colored tile carrying the section's line icon (replaces emoji everywhere).
+function tileEl(cat, size = 20) {
+  const t = document.createElement("span");
+  t.className = "tile";
+  t.style.setProperty("--tb", cat.bg);
+  t.style.setProperty("--tf", cat.fg);
+  t.append(icon(cat.icon, size));
+  return t;
+}
+document.querySelectorAll("[data-icon]").forEach((el) => el.append(icon(el.dataset.icon, Number(el.dataset.size) || 20)));
+document.querySelectorAll("[data-icon-label]").forEach((el) => el.prepend(icon(el.dataset.iconLabel, 18)));
+
 const catOf = (item) => categoryById(item.category || classify(item.name));
 
 // ---- Render ----
 function renderItem(item) {
-  const cat = catOf(item);
   const li = document.createElement("li");
   li.className = item.checked ? "done" : "";
-  li.style.setProperty("--h", cat.hue);
 
   const box = document.createElement("input");
   box.type = "checkbox";
@@ -91,13 +102,6 @@ function renderItem(item) {
     updateDoc(doc(itemsRef, item.id), { checked: box.checked })
       .catch(() => setStatus("לא הצלחתי לעדכן, בדוק חיבור לאינטרנט", true));
   });
-
-  const tile = document.createElement("button");
-  tile.type = "button";
-  tile.className = "tile";
-  tile.textContent = cat.emoji;
-  tile.setAttribute("aria-label", `מחלקה: ${cat.name}. לחץ לשינוי`);
-  tile.addEventListener("click", () => openPicker(item));
 
   const label = document.createElement("label");
   label.htmlFor = box.id;
@@ -111,7 +115,7 @@ function renderItem(item) {
     name.append(q);
   }
   label.append(name);
-  const metaParts = [item.note, item.addedBy && "👤 " + item.addedBy].filter(Boolean);
+  const metaParts = [item.note, item.addedBy].filter(Boolean);
   if (metaParts.length) {
     const meta = document.createElement("span");
     meta.className = "meta";
@@ -121,22 +125,22 @@ function renderItem(item) {
 
   const edit = document.createElement("button");
   edit.type = "button";
-  edit.className = "edit";
+  edit.className = "ibtn";
   edit.setAttribute("aria-label", "ערוך " + item.name);
-  edit.textContent = "✎";
+  edit.append(icon("edit", 18));
   edit.addEventListener("click", () => openEdit(item));
 
   const del = document.createElement("button");
   del.type = "button";
-  del.className = "del";
+  del.className = "ibtn";
   del.setAttribute("aria-label", "מחק " + item.name);
-  del.textContent = "✕";
+  del.append(icon("close", 18));
   del.addEventListener("click", () => {
     deleteDoc(doc(itemsRef, item.id))
       .catch(() => setStatus("לא הצלחתי למחוק", true));
   });
 
-  li.append(box, tile, label, edit, del);
+  li.append(box, label, edit, del);
   return li;
 }
 
@@ -152,13 +156,11 @@ function render() {
   $("list").replaceChildren(...groups.map((g) => {
     const section = document.createElement("section");
     section.className = "group";
-    section.style.setProperty("--h", g.cat.hue);
     const h = document.createElement("button");
     h.type = "button";
     h.className = "group-head";
-    const emo = document.createElement("span");
-    emo.className = "gh-emoji";
-    emo.textContent = g.cat.emoji;
+    const tile = tileEl(g.cat, 22);
+    tile.classList.add("gh-tile");
     const gname = document.createElement("span");
     gname.className = "gh-name";
     gname.textContent = g.cat.name;
@@ -167,8 +169,8 @@ function render() {
     count.textContent = g.items.length;
     const chev = document.createElement("span");
     chev.className = "chev";
-    chev.textContent = "⌄";
-    h.append(emo, gname, count, chev);
+    chev.append(icon("chevron", 20));
+    h.append(tile, gname, count, chev);
     const isCollapsed = collapsed.has(g.cat.id);
     section.classList.toggle("collapsed", isCollapsed);
     h.setAttribute("aria-expanded", String(!isCollapsed));
@@ -180,7 +182,10 @@ function render() {
     });
     const ul = document.createElement("ul");
     ul.append(...g.items.map(renderItem));
-    section.append(h, ul);
+    const card = document.createElement("div");
+    card.className = "card";
+    card.append(ul);
+    section.append(h, card);
     return section;
   }));
 
@@ -194,18 +199,24 @@ function render() {
   renderSuggestions();
 }
 
-const RING_LEN = 226.2; // 2 * PI * r(36)
-
 function updateHero(todoN, doneN) {
   const total = todoN + doneN;
-  $("ring-fg").style.strokeDashoffset = RING_LEN * (1 - (total ? doneN / total : 0));
-  $("ring-num").textContent = total ? `${doneN}/${total}` : "0";
-  $("ring-of").textContent = total ? "בעגלה" : "";
+  $("big-done").textContent = doneN;
+  $("big-total").textContent = "/" + total;
   $("summary").textContent = !total ? "הרשימה ריקה, בואו נתחיל" :
-    todoN ? `${todoN} נשארו לקחת · ${doneN} כבר בעגלה` : "הכול בעגלה, כל הכבוד! 🎉";
+    todoN ? `מוצרים בעגלה. עוד ${todoN} לקחת.` : "הכול בעגלה, כל הכבוד";
+
+  // one segment per product (capped so a long list stays readable)
+  const n = Math.min(total, 40);
+  const onN = total ? Math.round((doneN / total) * n) : 0;
+  $("segs").replaceChildren(...Array.from({ length: n }, (_, i) => {
+    const seg = document.createElement("i");
+    seg.className = "seg" + (i < onN ? " on" : "");
+    return seg;
+  }));
 
   $("mini-num").textContent = total ? `${doneN}/${total}` : "0";
-  $("mini-sum").textContent = total ? (todoN ? `${todoN} נשארו` : "הכול בעגלה 🎉") : "העגלה ריקה";
+  $("mini-sum").textContent = total ? (todoN ? `עוד ${todoN} לקחת` : "הכול בעגלה") : "העגלה ריקה";
   $("mini-fill").style.width = total ? `${(doneN / total) * 100}%` : "0";
 
   // Celebrate the moment the last item gets checked off (not on first load).
@@ -219,17 +230,22 @@ function greeting() {
   return h < 5 ? "לילה טוב" : h < 12 ? "בוקר טוב" : h < 17 ? "צהריים טובים" : h < 21 ? "ערב טוב" : "לילה טוב";
 }
 function renderGreeting() {
-  $("greeting").textContent = greeting() + (me ? ", " + me : "") + " 👋";
+  $("greeting").textContent = greeting() + (me ? ", " + me : "");
 }
 renderGreeting();
 
+// Flat shapes in the palette (no emoji).
 function confetti() {
   const box = $("confetti");
-  const glyphs = ["🎉", "✨", "🥕", "🍎", "🥛", "🍞", "⭐", "🧀"];
-  for (let i = 0; i < 36; i++) {
-    const p = document.createElement("span");
+  const colors = ["#2A3DE0", "#F5E663", "#FF7A45", "#FF9FA8", "#DCD3FF", "#BFE3FF"];
+  for (let i = 0; i < 40; i++) {
+    const p = document.createElement("i");
     p.className = "piece";
-    p.textContent = glyphs[i % glyphs.length];
+    const size = 8 + Math.random() * 10;
+    p.style.width = size + "px";
+    p.style.height = (i % 3 === 0 ? size * 2.2 : size) + "px";
+    p.style.borderRadius = i % 2 ? "50%" : "3px";
+    p.style.background = colors[i % colors.length];
     p.style.left = Math.random() * 100 + "%";
     p.style.setProperty("--dx", (Math.random() * 160 - 80) + "px");
     p.style.setProperty("--rot", (Math.random() * 900 - 450) + "deg");
@@ -282,8 +298,7 @@ function openPicker(item) {
     const b = document.createElement("button");
     b.type = "button";
     b.className = "pick" + (c.id === catOf(item).id ? " current" : "");
-    b.style.setProperty("--h", c.hue);
-    b.textContent = `${c.emoji} ${c.name}`;
+    b.append(tileEl(c, 18), document.createTextNode(c.name));
     b.addEventListener("click", () => {
       updateDoc(doc(itemsRef, item.id), { category: c.id })
         .catch(() => setStatus("לא הצלחתי לעדכן קטגוריה", true));
@@ -307,9 +322,9 @@ function renderOrderDialog() {
     const c = categoryById(id);
     const li = document.createElement("li");
     li.className = "order-row";
-    li.style.setProperty("--h", c.hue);
     const label = document.createElement("span");
-    label.textContent = `${c.emoji} ${c.name}`;
+    label.className = "lbl";
+    label.textContent = c.name;
     const up = document.createElement("button");
     up.type = "button"; up.textContent = "↑"; up.disabled = idx === 0;
     up.setAttribute("aria-label", `הזז למעלה: ${c.name}`);
@@ -318,7 +333,7 @@ function renderOrderDialog() {
     down.type = "button"; down.textContent = "↓"; down.disabled = idx === order.length - 1;
     down.setAttribute("aria-label", `הזז למטה: ${c.name}`);
     down.addEventListener("click", () => moveCategory(idx, 1));
-    li.append(label, up, down);
+    li.append(tileEl(c, 18), label, up, down);
     return li;
   }));
 }
@@ -434,12 +449,7 @@ function renderSuggestions() {
     const b = document.createElement("button");
     b.type = "button";
     b.className = "sugg";
-    b.style.setProperty("--h", cat.hue);
-    b.textContent = `${cat.emoji} ${n} `;
-    const plus = document.createElement("span");
-    plus.className = "plus";
-    plus.textContent = "+";
-    b.append(plus);
+    b.append(tileEl(cat, 16), document.createTextNode(n));
     b.addEventListener("click", () => addNames([n]));
     return b;
   }));
@@ -497,6 +507,8 @@ function openEdit(item) {
   $("edit-name").value = item.name;
   $("edit-note").value = item.note || "";
   setQty(item.qty || 1);
+  const c = catOf(item);
+  $("edit-cat").replaceChildren(tileEl(c, 18), document.createTextNode(c.name));
   editDialog.showModal();
 }
 
@@ -512,6 +524,12 @@ $("edit-form").addEventListener("submit", (e) => {
     note: note || deleteField(),
   }).catch(() => setStatus("לא הצלחתי לשמור את השינויים", true));
   editDialog.close();
+});
+$("edit-cat").addEventListener("click", () => {
+  if (!editing) return;
+  const it = editing;
+  editDialog.close();
+  openPicker(it);
 });
 $("edit-delete").addEventListener("click", () => {
   if (!editing) return;
@@ -555,17 +573,16 @@ $("clear-done").addEventListener("click", async () => {
 
 // ---- Themes (shared through prefs; localStorage avoids a flash of the default) ----
 const THEMES = [
-  { id: "coral", name: "אלמוג", css: "linear-gradient(135deg,#e14b36,#ff9d5e)", meta: "#e8563f" },
-  { id: "pink", name: "ורוד", css: "linear-gradient(135deg,#c02a72,#ff8bb8)", meta: "#d6367f" },
-  { id: "violet", name: "סגול", css: "linear-gradient(135deg,#5a3ecf,#a98cff)", meta: "#6c4ce0" },
-  { id: "ocean", name: "כחול", css: "linear-gradient(135deg,#0e62b0,#52c6f7)", meta: "#1479c9" },
-  { id: "sun", name: "שמש", css: "linear-gradient(135deg,#e07a08,#ffc93c)", meta: "#d9820b" },
-  { id: "forest", name: "ירוק", css: "linear-gradient(135deg,#1a6b4f,#38b98f)", meta: "#1f7a5a" },
+  { id: "cobalt", name: "קובלט", color: "#2A3DE0" },
+  { id: "tomato", name: "עגבנייה", color: "#E5482D" },
+  { id: "violet", name: "סגול", color: "#6B4DE6" },
+  { id: "pink", name: "ורוד", color: "#D6307A" },
+  { id: "amber", name: "ענבר", color: "#C76A00" },
+  { id: "ink", name: "שחור", color: "#0D0D0D" },
 ];
 function applyTheme(id) {
   const t = THEMES.find((x) => x.id === id) || THEMES[0];
   document.documentElement.dataset.theme = t.id;
-  document.querySelector('meta[name="theme-color"]').content = t.meta;
   try { localStorage.setItem("theme", t.id); } catch {}
   document.querySelectorAll(".swatch").forEach((b) => b.setAttribute("aria-pressed", b.dataset.id === t.id));
 }
@@ -574,7 +591,7 @@ try { applyTheme(localStorage.getItem("theme")); } catch { applyTheme(); }
 $("swatches").replaceChildren(...THEMES.map((t) => {
   const b = document.createElement("button");
   b.type = "button"; b.className = "swatch"; b.dataset.id = t.id;
-  b.style.background = t.css; b.setAttribute("aria-label", t.name);
+  b.style.background = t.color; b.setAttribute("aria-label", t.name);
   b.addEventListener("click", () => {
     applyTheme(t.id);
     setDoc(prefsRef, { theme: t.id }, { merge: true }).catch(() => setStatus("לא הצלחתי לשמור את הצבע", true));
@@ -587,7 +604,7 @@ $("theme-btn").addEventListener("click", () => $("theme-dialog").showModal());
 // ---- Connect devices: WhatsApp link, copy, QR ----
 function openConnect() {
   const url = location.href;
-  $("wa").href = "https://wa.me/?text=" + encodeURIComponent("הנה העגלה המשפחתית שלנו 🛒\n" + url);
+  $("wa").href = "https://wa.me/?text=" + encodeURIComponent("הנה העגלה המשפחתית שלנו\n" + url);
   const qrBox = $("qr");
   try {
     const qr = qrcode(0, "M");
@@ -634,4 +651,4 @@ $("hint-go").addEventListener("click", () => { dismissHint(); openConnect(); });
 
 // ---- Compact bar that appears once the big header scrolls away ----
 new IntersectionObserver(([e]) => document.body.classList.toggle("scrolled", !e.isIntersecting), { threshold: 0 })
-  .observe(document.querySelector(".hero"));
+  .observe(document.querySelector(".top"));

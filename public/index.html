@@ -3,58 +3,43 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#e8563f">
+  <meta name="theme-color" content="#F1F1EE">
   <title>העגלה המשפחתית</title>
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="העגלה">
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <link rel="apple-touch-icon" href="apple-touch-icon.png">
   <link rel="icon" type="image/png" href="icon-192.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;700;800;900&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Rubik:wght@400;500;700;800;900&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <header class="hero">
-    <span class="blob b1"></span><span class="blob b2"></span><span class="blob b3"></span>
-
-    <div class="hero-inner">
-      <div class="hero-top">
-        <p class="eyebrow">🛒 העגלה המשפחתית</p>
-        <div class="hero-actions">
-        <button id="theme-btn" type="button" class="share icon-btn" aria-label="בחירת צבע">🎨</button>
-        <button id="share" type="button" class="share" aria-label="חיבור מכשירים ושיתוף">
-          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="M8.6 13.5l6.8 4M15.4 6.5l-6.8 4"/></svg>
-          <span>חבר מכשיר</span>
-        </button>
-        </div>
+  <header class="top">
+    <div class="top-row">
+      <span class="brand">העגלה המשפחתית</span>
+      <div class="top-actions">
+        <button id="theme-btn" type="button" class="round" aria-label="בחירת צבע" data-icon="palette"></button>
+        <button id="share" type="button" class="round dark" aria-label="חיבור מכשירים ושיתוף" data-icon="share"></button>
       </div>
-
-      <div class="hero-main">
-        <div class="hero-text">
-          <h1 id="greeting" role="button" tabindex="0" title="שינוי שם">שלום!</h1>
-          <p id="summary" class="summary"></p>
-        </div>
-        <div class="ring" aria-hidden="true">
-          <svg viewBox="0 0 84 84">
-            <circle class="ring-bg" cx="42" cy="42" r="36"/>
-            <circle id="ring-fg" class="ring-fg" cx="42" cy="42" r="36"/>
-          </svg>
-          <div class="ring-label"><b id="ring-num">0</b><small id="ring-of"></small></div>
-        </div>
-      </div>
-
-      <button id="order-btn" type="button" class="order-btn">
-        <span>🧭</span> סדר הסופר
-      </button>
     </div>
-    <svg class="wave" viewBox="0 0 1440 60" preserveAspectRatio="none" aria-hidden="true"><path d="M0,34 C220,64 470,6 730,30 C990,54 1210,8 1440,34 L1440,60 L0,60Z"/></svg>
+
+    <p id="greeting" class="greet" role="button" tabindex="0" title="שינוי שם">שלום</p>
+
+    <div class="bignum" dir="ltr" aria-hidden="true">
+      <span id="big-total" class="bn-total">/0</span>
+      <span id="big-done" class="bn-done">0</span>
+    </div>
+    <p id="summary" class="caption"></p>
+    <div id="segs" class="segs" aria-hidden="true"></div>
+
+    <button id="order-btn" type="button" class="pill-btn" data-icon-label="route">סדר הסופר</button>
   </header>
 
   <div id="mini" class="mini" aria-hidden="true">
-    <span class="mini-title">🛒 <b id="mini-num">0/0</b></span>
+    <b id="mini-num" class="mini-num">0/0</b>
     <span id="mini-sum" class="mini-sum"></span>
     <div class="mini-bar"><i id="mini-fill"></i></div>
   </div>
@@ -63,29 +48,29 @@
     <p id="status" role="status"></p>
 
     <div id="hint" class="hint-banner" hidden>
-      <p>💡 כדי לראות את אותה עגלה גם בטלפון וגם במחשב, צריך לפתוח את <b>אותו קישור</b> בכל מכשיר.</p>
+      <p>כדי לראות את אותה עגלה גם בטלפון וגם במחשב, צריך לפתוח את <b>אותו קישור</b> בכל מכשיר.</p>
       <button type="button" class="go" id="hint-go">חבר</button>
-      <button type="button" class="x" id="hint-x" aria-label="סגור">✕</button>
+      <button type="button" class="x" id="hint-x" aria-label="סגור" data-icon="close"></button>
     </div>
 
     <section id="sugg" hidden>
-      <h2 class="sugg-title">⚡ הוספה מהירה</h2>
+      <h2 class="cap">הוספה מהירה</h2>
       <div id="sugg-row" class="sugg-row"></div>
     </section>
 
     <div id="skeleton" class="skeleton" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
 
     <div id="all-done" class="all-done" hidden>
-      <div class="ad-emoji">🎉</div>
-      <h2>הכול בעגלה!</h2>
+      <div class="ad-mark" data-icon="check" data-size="34"></div>
+      <h2>הכול בעגלה</h2>
       <p>כל הכבוד. אפשר לנקות ולהתחיל רשימה חדשה.</p>
       <button type="button" id="all-done-clear">נקה והתחל מחדש</button>
     </div>
 
     <div id="empty" class="empty" hidden>
       <div class="empty-art" aria-hidden="true">
-        <span class="e1">🥕</span><span class="e2">🥛</span><span class="e3">🍞</span><span class="e4">🍎</span>
-        <div class="empty-cart">🛒</div>
+        <i class="s1"></i><i class="s2"></i><i class="s3"></i><i class="s4"></i>
+        <div class="empty-cart" data-icon="cart" data-size="52"></div>
       </div>
       <h2>העגלה מחכה למוצר הראשון</h2>
       <p>כתבו למטה מה חסר בבית.<br>כולם במשפחה יראו את זה מיד.</p>
@@ -95,62 +80,60 @@
 
     <section id="done-section" hidden>
       <div class="section-title">
-        <h2>✓ כבר בעגלה <span id="done-count"></span></h2>
+        <h2 class="cap">בעגלה <span id="done-count"></span></h2>
         <button id="clear-done" type="button" class="link">נקה הכול</button>
       </div>
-      <ul id="done-list"></ul>
+      <div class="card"><ul id="done-list"></ul></div>
     </section>
   </main>
 
   <form id="add-form" class="add-bar" autocomplete="off">
-    <textarea id="add-input" rows="1" maxlength="2000" placeholder="מה חסר בבית?" aria-label="מוצרים להוספה" required></textarea>
-    <button type="button" id="mic" class="mic" aria-label="הקלטה קולית" hidden>
-      <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="3" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>
-    </button>
-    <button type="submit" aria-label="הוסף מוצר">
-      <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
-    </button>
+    <div class="add-box">
+      <textarea id="add-input" rows="1" maxlength="2000" placeholder="מה חסר בבית?" aria-label="מוצרים להוספה" required></textarea>
+      <button type="button" id="mic" class="sq" aria-label="הקלטה קולית" data-icon="mic" hidden></button>
+      <button type="submit" class="sq accent" aria-label="הוסף מוצר" data-icon="plus" data-size="22"></button>
+    </div>
   </form>
 
   <dialog id="picker">
     <h2 id="picker-title"></h2>
-    <p class="hint">נזכור את הבחירה גם בפעם הבאה 🧠</p>
+    <p class="hint">נזכור את הבחירה גם בפעם הבאה.</p>
     <div id="picker-list"></div>
     <button type="button" class="link" data-close>ביטול</button>
   </dialog>
 
   <dialog id="order-dialog">
-    <h2>🧭 סדר הסופר</h2>
+    <h2>סדר הסופר</h2>
     <p class="hint">סדרו לפי הסדר שבו עוברים בסופר שלכם. הרשימה תתעדכן לכולם.</p>
     <ul id="order-list"></ul>
     <div class="dialog-actions">
       <button type="button" class="link" id="order-reset">איפוס לברירת מחדל</button>
-      <button type="button" data-close>סיום</button>
+      <button type="button" class="primary" data-close>סיום</button>
     </div>
   </dialog>
 
   <dialog id="connect-dialog">
-    <h2>📱 חיבור מכשירים</h2>
+    <h2>חיבור מכשירים</h2>
     <p class="hint">כל מי שפותח את הקישור הזה רואה ומעדכן את אותה עגלה. שלחו אותו לעצמכם ולמשפחה.</p>
     <div id="qr" class="qr" hidden></div>
     <div class="stack">
       <a id="wa" class="btn" target="_blank" rel="noopener">שלח בוואטסאפ</a>
       <button type="button" class="btn secondary" id="copy-link">העתק קישור</button>
-      <button type="button" class="btn secondary" id="install-btn">📲 הוסף למסך הבית</button>
+      <button type="button" class="btn secondary" id="install-btn">הוסף למסך הבית</button>
       <p id="install-help" class="hint" hidden></p>
       <button type="button" class="link" data-close>סגור</button>
     </div>
   </dialog>
 
   <dialog id="theme-dialog">
-    <h2>🎨 בחרו צבע</h2>
+    <h2>בחרו צבע</h2>
     <p class="hint">הצבע נשמר לכל המשפחה.</p>
     <div class="swatches" id="swatches"></div>
-    <div class="dialog-actions"><span></span><button type="button" data-close>סיום</button></div>
+    <div class="dialog-actions"><span></span><button type="button" class="primary" data-close>סיום</button></div>
   </dialog>
 
   <dialog id="edit-dialog">
-    <h2>✏️ עריכת מוצר</h2>
+    <h2>עריכת מוצר</h2>
     <form id="edit-form" autocomplete="off">
       <label class="field"><span>שם</span><input id="edit-name" type="text" maxlength="80" required></label>
       <div class="field"><span>כמות</span>
@@ -161,21 +144,24 @@
         </div>
       </div>
       <label class="field"><span>הערה</span><input id="edit-note" type="text" maxlength="60" placeholder="למשל: תנובה דווקא"></label>
+      <div class="field"><span>מחלקה</span>
+        <button type="button" id="edit-cat" class="cat-btn"></button>
+      </div>
       <div class="dialog-actions">
         <button type="button" class="link danger" id="edit-delete">מחק מוצר</button>
-        <button type="submit">שמור</button>
+        <button type="submit" class="primary">שמור</button>
       </div>
     </form>
   </dialog>
 
   <dialog id="name-dialog">
-    <h2>👋 איך קוראים לך?</h2>
+    <h2>איך קוראים לך?</h2>
     <p class="hint">כך המשפחה תראה מי הוסיף כל מוצר.</p>
     <form id="name-form" autocomplete="off">
       <label class="field"><input id="name-input" type="text" maxlength="20" placeholder="למשל: אמא" required></label>
       <div class="dialog-actions">
         <button type="button" class="link" id="name-skip">אולי אחר כך</button>
-        <button type="submit">שמור</button>
+        <button type="submit" class="primary">שמור</button>
       </div>
     </form>
   </dialog>
