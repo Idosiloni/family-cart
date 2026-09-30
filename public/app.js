@@ -4,7 +4,8 @@ import {
   onSnapshot, query, orderBy, writeBatch,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
 import { firebaseConfig } from "./firebase-config.js";
-import { CATEGORIES, DEFAULT_ORDER, categoryById, classify, normalizeOrder } from "./categories.js";
+import { CATEGORIES, DEFAULT_ORDER, categoryById, classify, normalizeOrder, setLearned, rememberLocally } from "./categories.js";
+import { parseItems } from "./parse.js";
 
 const $ = (id) => document.getElementById(id);
 const statusEl = $("status");
@@ -42,6 +43,7 @@ const cartId = getCartId();
 const db = getFirestore(initializeApp(firebaseConfig));
 const itemsRef = collection(db, "carts", cartId, "items");
 const prefsRef = doc(db, "carts", cartId, "settings", "prefs");
+const learnedRef = doc(db, "carts", cartId, "settings", "learned");
 
 // ---- State ----
 let items = [];
@@ -177,6 +179,12 @@ onSnapshot(
   },
 );
 
+// Corrections the family made ("לחמים belongs in bakery"): used for every future item.
+onSnapshot(learnedRef, (snap) => {
+  setLearned(snap.exists() ? snap.data().map : {});
+  render();
+}, (err) => console.error(err));
+
 onSnapshot(prefsRef, (snap) => {
   const data = snap.exists() ? snap.data() : {};
   order = normalizeOrder(data.order);
@@ -201,6 +209,11 @@ function openPicker(item) {
     b.addEventListener("click", () => {
       updateDoc(doc(itemsRef, item.id), { category: c.id })
         .catch(() => setStatus("לא הצלחתי לעדכן קטגוריה", true));
+      const key = rememberLocally(item.name, c.id);
+      if (key) {
+        setDoc(learnedRef, { map: { [key]: c.id } }, { merge: true })
+          .catch(() => setStatus("לא הצלחתי לזכור את הבחירה", true));
+      }
       picker.close();
     });
     return b;
@@ -258,19 +271,56 @@ document.querySelectorAll("dialog").forEach((d) => {
 });
 
 // ---- Actions ----
+const addInput = $("add-input");
+const autoGrow = () => { addInput.style.height = "auto"; addInput.style.height = Math.min(addInput.scrollHeight + 2, 168) + "px"; };
+addInput.addEventListener("input", autoGrow);
+// Desktop: Enter sends, Shift+Enter = new line. Touch: Enter = new line, the + button sends.
+const isTouch = matchMedia("(pointer: coarse)").matches;
+addInput.addEventListener("keydown", (e) => {
+  if (e.key === "Enter" && !e.shiftKey && !isTouch && !e.isComposing) {
+    e.preventDefault();
+    $("add-form").requestSubmit();
+  }
+});
+
+let statusTimer;
+function flash(text) {
+  setStatus(text);
+  clearTimeout(statusTimer);
+  statusTimer = setTimeout(() => setStatus(""), 3000);
+}
+
 $("add-form").addEventListener("submit", async (e) => {
   e.preventDefault();
-  const input = $("add-input");
-  const name = input.value.trim().slice(0, 80);
-  if (!name) return;
-  input.value = "";
-  input.focus();
+  const text = addInput.value;
+  const names = parseItems(text);
+  if (!names.length) return;
+
+  // Skip things that are already waiting on the list.
+  const waiting = new Set(items.filter((i) => !i.checked).map((i) => i.name.trim().toLowerCase()));
+  const fresh = names.filter((n) => !waiting.has(n.toLowerCase()));
+  addInput.value = "";
+  autoGrow();
+  addInput.focus();
+  if (!fresh.length) return flash("כבר יש את זה ברשימה");
+
   setStatus("");
   try {
-    await addDoc(itemsRef, { name, checked: false, createdAt: Date.now(), category: classify(name) });
+    const batch = writeBatch(db);
+    const now = Date.now();
+    fresh.forEach((name, i) => {
+      batch.set(doc(itemsRef), { name, checked: false, createdAt: now + i, category: classify(name) });
+    });
+    await batch.commit();
+    const skipped = names.length - fresh.length;
+    if (fresh.length > 1 || skipped) {
+      const added = fresh.length === 1 ? "נוסף מוצר אחד" : `נוספו ${fresh.length} מוצרים`;
+      flash(`${added} ✓` + (skipped ? ` (${skipped} כבר היו ברשימה)` : ""));
+    }
   } catch (err) {
     console.error(err);
-    input.value = name;
+    addInput.value = text;
+    autoGrow();
     setStatus("לא הצלחתי להוסיף, נסה שוב", true);
   }
 });

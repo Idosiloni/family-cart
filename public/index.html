@@ -76,7 +76,7 @@
   </main>
 
   <form id="add-form" class="add-bar" autocomplete="off">
-    <input id="add-input" type="text" maxlength="80" placeholder="מה חסר בבית?" enterkeyhint="done" aria-label="שם המוצר" required>
+    <textarea id="add-input" rows="1" maxlength="2000" placeholder="מה חסר בבית? אפשר כמה מוצרים יחד" aria-label="מוצרים להוספה" required></textarea>
     <button type="submit" aria-label="הוסף מוצר">
       <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
     </button>
@@ -84,6 +84,7 @@
 
   <dialog id="picker">
     <h2 id="picker-title"></h2>
+    <p class="hint">נזכור את הבחירה גם בפעם הבאה 🧠</p>
     <div id="picker-list"></div>
     <button type="button" class="link" data-close>ביטול</button>
   </dialog>

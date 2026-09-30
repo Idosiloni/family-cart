@@ -22,16 +22,25 @@ service cloud.firestore {
       allow delete: if cartId.size() >= 16;
     }
 
-    // Per-cart preferences: the family's supermarket walking order.
+    // Per-cart settings docs:
+    //  prefs   - supermarket walking order + color theme
+    //  learned - the family's corrections of product -> section (map of name -> section id)
     match /carts/{cartId}/settings/{docId} {
       allow get: if cartId.size() >= 16;
       allow create, update: if cartId.size() >= 16
-        && docId == 'prefs'
-        && request.resource.data.keys().hasOnly(['order', 'theme'])
-        && (!('order' in request.resource.data)
-            || (request.resource.data.order is list && request.resource.data.order.size() <= 30))
-        && (!('theme' in request.resource.data)
-            || (request.resource.data.theme is string && request.resource.data.theme.size() <= 12));
+        && (
+          (docId == 'prefs'
+            && request.resource.data.keys().hasOnly(['order', 'theme'])
+            && (!('order' in request.resource.data)
+                || (request.resource.data.order is list && request.resource.data.order.size() <= 30))
+            && (!('theme' in request.resource.data)
+                || (request.resource.data.theme is string && request.resource.data.theme.size() <= 12)))
+          ||
+          (docId == 'learned'
+            && request.resource.data.keys().hasOnly(['map'])
+            && request.resource.data.map is map
+            && request.resource.data.map.size() <= 500)
+        );
     }
   }
 }

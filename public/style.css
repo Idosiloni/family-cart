@@ -174,7 +174,7 @@ h2 { margin: 0; font-size: .95rem; font-weight: 800; color: var(--muted); }
 /* ================= ADD BAR ================= */
 .add-bar {
   position: fixed; inset-inline: 0; bottom: 0; z-index: 5;
-  max-width: 560px; margin: 0 auto; display: flex; gap: 10px; align-items: center;
+  max-width: 560px; margin: 0 auto; display: flex; gap: 10px; align-items: flex-end;
   padding: 24px 14px calc(env(safe-area-inset-bottom) + 14px);
   background: linear-gradient(to top, var(--bg) 62%, transparent);
 }
@@ -182,7 +182,8 @@ h2 { margin: 0; font-size: .95rem; font-weight: 800; color: var(--muted); }
   flex: 1; min-width: 0; font: inherit; font-size: 17px; font-weight: 500;
   color: var(--ink); background: var(--card);
   border: 2px solid transparent; border-radius: 99px;
-  padding: 0 24px; height: 58px; box-shadow: 0 8px 28px rgba(29, 42, 36, .16); outline: none;
+  padding: 16px 24px; height: 58px; max-height: 168px; line-height: 1.35; resize: none; overflow-y: auto;
+  border-radius: 29px; box-shadow: 0 8px 28px rgba(29, 42, 36, .16); outline: none;
   transition: border-color .2s, box-shadow .2s;
 }
 #add-input::placeholder { color: var(--muted); font-weight: 400; }
