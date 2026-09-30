@@ -40,6 +40,23 @@ if (!firebaseConfig.projectId) {
 }
 
 const cartId = getCartId();
+
+// ---- Installable app: manifest is built at runtime so the home-screen icon opens THIS cart ----
+(function setupManifest() {
+  const manifest = {
+    name: "העגלה המשפחתית", short_name: "העגלה", lang: "he", dir: "rtl",
+    id: "/", scope: location.origin + "/", start_url: location.origin + location.pathname + location.hash,
+    display: "standalone", background_color: "#f7f3ea", theme_color: "#e8563f",
+    icons: [
+      { src: location.origin + "/icon-192.png", sizes: "192x192", type: "image/png", purpose: "any maskable" },
+      { src: location.origin + "/icon-512.png", sizes: "512x512", type: "image/png", purpose: "any maskable" },
+    ],
+  };
+  const link = document.createElement("link");
+  link.rel = "manifest";
+  link.href = URL.createObjectURL(new Blob([JSON.stringify(manifest)], { type: "application/manifest+json" }));
+  document.head.append(link);
+})();
 const db = getFirestore(initializeApp(firebaseConfig));
 const itemsRef = collection(db, "carts", cartId, "items");
 const prefsRef = doc(db, "carts", cartId, "settings", "prefs");
@@ -383,6 +400,26 @@ function openConnect() {
   $("connect-dialog").showModal();
 }
 $("share").addEventListener("click", openConnect);
+
+// ---- "Add to home screen" ----
+let installPrompt = null;
+addEventListener("beforeinstallprompt", (e) => { e.preventDefault(); installPrompt = e; });
+const isStandalone = matchMedia("(display-mode: standalone)").matches || navigator.standalone;
+if (isStandalone) $("install-btn").hidden = true;
+$("install-btn").addEventListener("click", async () => {
+  const help = $("install-help");
+  if (installPrompt) {
+    installPrompt.prompt();
+    await installPrompt.userChoice.catch(() => {});
+    installPrompt = null;
+    return;
+  }
+  const ios = /iphone|ipad|ipod/i.test(navigator.userAgent);
+  help.textContent = ios
+    ? "באייפון: לחצו על כפתור השיתוף (ריבוע עם חץ) בתחתית Safari, גללו ובחרו \"הוסף למסך הבית\"."
+    : "באנדרואיד: לחצו על שלוש הנקודות בדפדפן Chrome ובחרו \"הוסף למסך הבית\" או \"התקן אפליקציה\".";
+  help.hidden = false;
+});
 $("copy-link").addEventListener("click", async () => {
   try { await navigator.clipboard.writeText(location.href); $("copy-link").textContent = "הועתק ✓"; }
   catch { $("copy-link").textContent = "לא הצלחתי להעתיק"; }
