@@ -178,7 +178,9 @@ onSnapshot(
 );
 
 onSnapshot(prefsRef, (snap) => {
-  order = normalizeOrder(snap.exists() ? snap.data().order : null);
+  const data = snap.exists() ? snap.data() : {};
+  order = normalizeOrder(data.order);
+  if (data.theme) applyTheme(data.theme); // no saved theme: keep this device's choice
   render();
   if ($("order-dialog").open) renderOrderDialog();
 }, (err) => console.error(err));
@@ -238,7 +240,7 @@ function moveCategory(idx, delta) {
   order = next; // optimistic; snapshot confirms
   renderOrderDialog();
   render();
-  setDoc(prefsRef, { order: next })
+  setDoc(prefsRef, { order: next }, { merge: true })
     .catch(() => setStatus("לא הצלחתי לשמור את הסדר", true));
 }
 
@@ -247,7 +249,7 @@ $("order-reset").addEventListener("click", () => {
   order = [...DEFAULT_ORDER];
   renderOrderDialog();
   render();
-  setDoc(prefsRef, { order }).catch(() => setStatus("לא הצלחתי לשמור את הסדר", true));
+  setDoc(prefsRef, { order }, { merge: true }).catch(() => setStatus("לא הצלחתי לשמור את הסדר", true));
 });
 
 // Close dialogs on close-button or backdrop click.
@@ -286,10 +288,61 @@ $("clear-done").addEventListener("click", async () => {
   }
 });
 
-$("share").addEventListener("click", async () => {
+// ---- Themes (shared through prefs; localStorage avoids a flash of the default) ----
+const THEMES = [
+  { id: "coral", name: "אלמוג", css: "linear-gradient(135deg,#e14b36,#ff9d5e)", meta: "#e8563f" },
+  { id: "pink", name: "ורוד", css: "linear-gradient(135deg,#c02a72,#ff8bb8)", meta: "#d6367f" },
+  { id: "violet", name: "סגול", css: "linear-gradient(135deg,#5a3ecf,#a98cff)", meta: "#6c4ce0" },
+  { id: "ocean", name: "כחול", css: "linear-gradient(135deg,#0e62b0,#52c6f7)", meta: "#1479c9" },
+  { id: "sun", name: "שמש", css: "linear-gradient(135deg,#e07a08,#ffc93c)", meta: "#d9820b" },
+  { id: "forest", name: "ירוק", css: "linear-gradient(135deg,#1a6b4f,#38b98f)", meta: "#1f7a5a" },
+];
+function applyTheme(id) {
+  const t = THEMES.find((x) => x.id === id) || THEMES[0];
+  document.documentElement.dataset.theme = t.id;
+  document.querySelector('meta[name="theme-color"]').content = t.meta;
+  try { localStorage.setItem("theme", t.id); } catch {}
+  document.querySelectorAll(".swatch").forEach((b) => b.setAttribute("aria-pressed", b.dataset.id === t.id));
+}
+try { applyTheme(localStorage.getItem("theme")); } catch { applyTheme(); }
+
+$("swatches").replaceChildren(...THEMES.map((t) => {
+  const b = document.createElement("button");
+  b.type = "button"; b.className = "swatch"; b.dataset.id = t.id;
+  b.style.background = t.css; b.setAttribute("aria-label", t.name);
+  b.addEventListener("click", () => {
+    applyTheme(t.id);
+    setDoc(prefsRef, { theme: t.id }, { merge: true }).catch(() => setStatus("לא הצלחתי לשמור את הצבע", true));
+  });
+  return b;
+}));
+applyTheme(document.documentElement.dataset.theme);
+$("theme-btn").addEventListener("click", () => $("theme-dialog").showModal());
+
+// ---- Connect devices: WhatsApp link, copy, QR ----
+function openConnect() {
   const url = location.href;
+  $("wa").href = "https://wa.me/?text=" + encodeURIComponent("הנה העגלה המשפחתית שלנו 🛒\n" + url);
+  const qrBox = $("qr");
   try {
-    if (navigator.share) await navigator.share({ title: "העגלה המשפחתית", url });
-    else { await navigator.clipboard.writeText(url); setStatus("הקישור הועתק ✓"); }
-  } catch { /* user cancelled share */ }
+    const qr = qrcode(0, "M");
+    qr.addData(url); qr.make();
+    qrBox.innerHTML = qr.createSvgTag({ cellSize: 4, margin: 0, scalable: true }); // library-generated SVG of our own URL
+    qrBox.hidden = false;
+  } catch { qrBox.hidden = true; }
+  $("connect-dialog").showModal();
+}
+$("share").addEventListener("click", openConnect);
+$("copy-link").addEventListener("click", async () => {
+  try { await navigator.clipboard.writeText(location.href); $("copy-link").textContent = "הועתק ✓"; }
+  catch { $("copy-link").textContent = "לא הצלחתי להעתיק"; }
+  setTimeout(() => { $("copy-link").textContent = "העתק קישור"; }, 2000);
 });
+
+// One-time hint: the link is what joins devices together.
+let hintSeen = false;
+try { hintSeen = localStorage.getItem("hintSeen") === "1"; } catch {}
+$("hint").hidden = hintSeen;
+const dismissHint = () => { $("hint").hidden = true; try { localStorage.setItem("hintSeen", "1"); } catch {} };
+$("hint-x").addEventListener("click", dismissHint);
+$("hint-go").addEventListener("click", () => { dismissHint(); openConnect(); });

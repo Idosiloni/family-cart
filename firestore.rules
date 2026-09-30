@@ -27,9 +27,11 @@ service cloud.firestore {
       allow get: if cartId.size() >= 16;
       allow create, update: if cartId.size() >= 16
         && docId == 'prefs'
-        && request.resource.data.keys().hasOnly(['order'])
-        && request.resource.data.order is list
-        && request.resource.data.order.size() <= 30;
+        && request.resource.data.keys().hasOnly(['order', 'theme'])
+        && (!('order' in request.resource.data)
+            || (request.resource.data.order is list && request.resource.data.order.size() <= 30))
+        && (!('theme' in request.resource.data)
+            || (request.resource.data.theme is string && request.resource.data.theme.size() <= 12));
     }
   }
 }
