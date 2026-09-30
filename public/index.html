@@ -34,7 +34,7 @@
 
       <div class="hero-main">
         <div class="hero-text">
-          <h1 id="greeting">שלום!</h1>
+          <h1 id="greeting" role="button" tabindex="0" title="שינוי שם">שלום!</h1>
           <p id="summary" class="summary"></p>
         </div>
         <div class="ring" aria-hidden="true">
@@ -61,6 +61,11 @@
       <button type="button" class="x" id="hint-x" aria-label="סגור">✕</button>
     </div>
 
+    <section id="sugg" hidden>
+      <h2 class="sugg-title">⚡ הוספה מהירה</h2>
+      <div id="sugg-row" class="sugg-row"></div>
+    </section>
+
     <div id="empty" class="empty" hidden>
       <div class="empty-art" aria-hidden="true">
         <span class="e1">🥕</span><span class="e2">🥛</span><span class="e3">🍞</span><span class="e4">🍎</span>
@@ -82,7 +87,10 @@
   </main>
 
   <form id="add-form" class="add-bar" autocomplete="off">
-    <textarea id="add-input" rows="1" maxlength="2000" placeholder="מה חסר בבית? אפשר כמה מוצרים יחד" aria-label="מוצרים להוספה" required></textarea>
+    <textarea id="add-input" rows="1" maxlength="2000" placeholder="מה חסר? אפשר כמה יחד" aria-label="מוצרים להוספה" required></textarea>
+    <button type="button" id="mic" class="mic" aria-label="הקלטה קולית" hidden>
+      <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="3" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>
+    </button>
     <button type="submit" aria-label="הוסף מוצר">
       <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
     </button>
@@ -123,6 +131,37 @@
     <p class="hint">הצבע נשמר לכל המשפחה.</p>
     <div class="swatches" id="swatches"></div>
     <div class="dialog-actions"><span></span><button type="button" data-close>סיום</button></div>
+  </dialog>
+
+  <dialog id="edit-dialog">
+    <h2>✏️ עריכת מוצר</h2>
+    <form id="edit-form" autocomplete="off">
+      <label class="field"><span>שם</span><input id="edit-name" type="text" maxlength="80" required></label>
+      <div class="field"><span>כמות</span>
+        <div class="stepper">
+          <button type="button" id="qty-minus" aria-label="פחות">−</button>
+          <output id="qty-val">1</output>
+          <button type="button" id="qty-plus" aria-label="יותר">+</button>
+        </div>
+      </div>
+      <label class="field"><span>הערה</span><input id="edit-note" type="text" maxlength="60" placeholder="למשל: תנובה דווקא"></label>
+      <div class="dialog-actions">
+        <button type="button" class="link danger" id="edit-delete">מחק מוצר</button>
+        <button type="submit">שמור</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="name-dialog">
+    <h2>👋 איך קוראים לך?</h2>
+    <p class="hint">כך המשפחה תראה מי הוסיף כל מוצר.</p>
+    <form id="name-form" autocomplete="off">
+      <label class="field"><input id="name-input" type="text" maxlength="20" placeholder="למשל: אמא" required></label>
+      <div class="dialog-actions">
+        <button type="button" class="link" id="name-skip">אולי אחר כך</button>
+        <button type="submit">שמור</button>
+      </div>
+    </form>
   </dialog>
 
   <div id="confetti" aria-hidden="true"></div>

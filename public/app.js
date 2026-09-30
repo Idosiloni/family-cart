@@ -1,11 +1,11 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js";
 import {
   getFirestore, collection, doc, addDoc, updateDoc, deleteDoc, setDoc,
-  onSnapshot, query, orderBy, writeBatch,
+  onSnapshot, query, orderBy, writeBatch, increment, deleteField,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
 import { firebaseConfig } from "./firebase-config.js";
-import { CATEGORIES, DEFAULT_ORDER, categoryById, classify, normalizeOrder, setLearned, rememberLocally } from "./categories.js";
-import { parseItems } from "./parse.js";
+import { CATEGORIES, DEFAULT_ORDER, categoryById, classify, normalizeOrder, setLearned, rememberLocally, learnKey } from "./categories.js";
+import { parseItems, splitQty, splitSpoken } from "./parse.js";
 
 const $ = (id) => document.getElementById(id);
 const statusEl = $("status");
@@ -61,10 +61,14 @@ const db = getFirestore(initializeApp(firebaseConfig));
 const itemsRef = collection(db, "carts", cartId, "items");
 const prefsRef = doc(db, "carts", cartId, "settings", "prefs");
 const learnedRef = doc(db, "carts", cartId, "settings", "learned");
+const historyRef = doc(db, "carts", cartId, "settings", "history");
 
 // ---- State ----
 let items = [];
 let order = [...DEFAULT_ORDER];
+let buyStats = {}; // learnKey -> { n: name, c: times added, t: last added }
+let me = "";
+try { me = localStorage.getItem("me") || ""; } catch {}
 
 const catOf = (item) => categoryById(item.category || classify(item.name));
 
@@ -97,7 +101,27 @@ function renderItem(item) {
   const name = document.createElement("span");
   name.className = "name";
   name.textContent = item.name; // textContent: never HTML
+  if (item.qty > 1) {
+    const q = document.createElement("span");
+    q.className = "qty";
+    q.textContent = "×" + item.qty;
+    name.append(q);
+  }
   label.append(name);
+  const metaParts = [item.note, item.addedBy && "👤 " + item.addedBy].filter(Boolean);
+  if (metaParts.length) {
+    const meta = document.createElement("span");
+    meta.className = "meta";
+    meta.textContent = metaParts.join(" · ");
+    label.append(meta);
+  }
+
+  const edit = document.createElement("button");
+  edit.type = "button";
+  edit.className = "edit";
+  edit.setAttribute("aria-label", "ערוך " + item.name);
+  edit.textContent = "✎";
+  edit.addEventListener("click", () => openEdit(item));
 
   const del = document.createElement("button");
   del.type = "button";
@@ -109,7 +133,7 @@ function renderItem(item) {
       .catch(() => setStatus("לא הצלחתי למחוק", true));
   });
 
-  li.append(box, tile, label, del);
+  li.append(box, tile, label, edit, del);
   return li;
 }
 
@@ -143,6 +167,7 @@ function render() {
   $("done-section").hidden = done.length === 0;
   $("empty").hidden = items.length > 0;
   updateHero(todo.length, done.length);
+  renderSuggestions();
 }
 
 const RING_LEN = 226.2; // 2 * PI * r(36)
@@ -165,7 +190,10 @@ function greeting() {
   const h = new Date().getHours();
   return h < 5 ? "לילה טוב" : h < 12 ? "בוקר טוב" : h < 17 ? "צהריים טובים" : h < 21 ? "ערב טוב" : "לילה טוב";
 }
-$("greeting").textContent = greeting() + " 👋";
+function renderGreeting() {
+  $("greeting").textContent = greeting() + (me ? ", " + me : "") + " 👋";
+}
+renderGreeting();
 
 function confetti() {
   const box = $("confetti");
@@ -195,6 +223,11 @@ onSnapshot(
     setStatus("אין חיבור לעגלה. בדוק אינטרנט והרשאות (firestore.rules).", true);
   },
 );
+
+onSnapshot(historyRef, (snap) => {
+  buyStats = snap.exists() ? (snap.data().items || {}) : {};
+  renderSuggestions();
+}, (err) => console.error(err));
 
 // Corrections the family made ("לחמים belongs in bakery"): used for every future item.
 onSnapshot(learnedRef, (snap) => {
@@ -307,40 +340,176 @@ function flash(text) {
   statusTimer = setTimeout(() => setStatus(""), 3000);
 }
 
-$("add-form").addEventListener("submit", async (e) => {
-  e.preventDefault();
-  const text = addInput.value;
-  const names = parseItems(text);
-  if (!names.length) return;
+// Adds product names (already split). Skips what is already waiting; remembers counts for quick-add.
+async function addNames(rawNames, restoreText = "") {
+  const parsed = rawNames.map(splitQty).filter((p) => p.name.length >= 2);
+  if (!parsed.length) return;
 
-  // Skip things that are already waiting on the list.
   const waiting = new Set(items.filter((i) => !i.checked).map((i) => i.name.trim().toLowerCase()));
-  const fresh = names.filter((n) => !waiting.has(n.toLowerCase()));
-  addInput.value = "";
-  autoGrow();
-  addInput.focus();
+  const fresh = parsed.filter((p) => !waiting.has(p.name.toLowerCase()));
   if (!fresh.length) return flash("כבר יש את זה ברשימה");
 
   setStatus("");
   try {
     const batch = writeBatch(db);
     const now = Date.now();
-    fresh.forEach((name, i) => {
-      batch.set(doc(itemsRef), { name, checked: false, createdAt: now + i, category: classify(name) });
+    const seen = {};
+    fresh.forEach(({ name, qty }, i) => {
+      const data = { name, checked: false, createdAt: now + i, category: classify(name) };
+      if (qty > 1) data.qty = qty;
+      if (me) data.addedBy = me;
+      batch.set(doc(itemsRef), data);
+      const key = learnKey(name);
+      if (key) seen[key] = { n: name, c: increment(1), t: now };
     });
     await batch.commit();
-    const skipped = names.length - fresh.length;
+    if (Object.keys(seen).length) {
+      setDoc(historyRef, { items: seen }, { merge: true }).catch(() => {}); // quick-add stats are best-effort
+    }
+    const skipped = parsed.length - fresh.length;
     if (fresh.length > 1 || skipped) {
       const added = fresh.length === 1 ? "נוסף מוצר אחד" : `נוספו ${fresh.length} מוצרים`;
       flash(`${added} ✓` + (skipped ? ` (${skipped} כבר היו ברשימה)` : ""));
     }
   } catch (err) {
     console.error(err);
-    addInput.value = text;
-    autoGrow();
+    if (restoreText) { addInput.value = restoreText; autoGrow(); }
     setStatus("לא הצלחתי להוסיף, נסה שוב", true);
   }
+}
+
+$("add-form").addEventListener("submit", (e) => {
+  e.preventDefault();
+  const text = addInput.value;
+  const names = parseItems(text);
+  if (!names.length) return;
+  addInput.value = "";
+  autoGrow();
+  addInput.focus();
+  addNames(names, text);
 });
+
+// ---- Quick add chips: what this family buys most (starter set until there is history) ----
+const STARTERS = ["חלב", "ביצים", "לחם", "עגבניות", "מלפפונים", "במבה", "קולה", "אורז"];
+function renderSuggestions() {
+  const onList = new Set(items.map((i) => learnKey(i.name)));
+  const fromHistory = Object.entries(buyStats)
+    .filter(([k, v]) => v && typeof v.n === "string" && !onList.has(k))
+    .sort((a, b) => (b[1].c || 0) - (a[1].c || 0) || (b[1].t || 0) - (a[1].t || 0))
+    .map(([, v]) => v.n);
+  const starters = STARTERS.filter((n) => !onList.has(learnKey(n)) && !fromHistory.includes(n));
+  const names = [...fromHistory, ...starters].slice(0, 10);
+
+  $("sugg").hidden = names.length === 0;
+  $("sugg-row").replaceChildren(...names.map((n) => {
+    const cat = categoryById(classify(n));
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "sugg";
+    b.style.setProperty("--h", cat.hue);
+    b.textContent = `${cat.emoji} ${n} `;
+    const plus = document.createElement("span");
+    plus.className = "plus";
+    plus.textContent = "+";
+    b.append(plus);
+    b.addEventListener("click", () => addNames([n]));
+    return b;
+  }));
+}
+
+// ---- Voice input (Web Speech API, Hebrew) ----
+const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+if (SR) {
+  const mic = $("mic");
+  mic.hidden = false;
+  let rec = null;
+  let heard = "";
+  const setListening = (on) => {
+    mic.classList.toggle("listening", on);
+    addInput.placeholder = on ? "מקשיב... אמרו מה חסר" : "מה חסר? אפשר כמה יחד";
+  };
+  mic.addEventListener("click", () => {
+    if (rec) { rec.stop(); return; }
+    rec = new SR();
+    rec.lang = "he-IL";
+    rec.interimResults = true;
+    rec.continuous = false;
+    heard = "";
+    rec.onstart = () => setListening(true);
+    rec.onresult = (e) => {
+      heard = Array.from(e.results, (r) => r[0].transcript).join(" ");
+      addInput.value = heard;
+      autoGrow();
+    };
+    rec.onerror = (e) => {
+      flash(e.error === "not-allowed" ? "צריך לאשר גישה למיקרופון" : e.error === "no-speech" ? "לא שמעתי, נסו שוב" : "ההקלטה נכשלה");
+    };
+    rec.onend = () => {
+      setListening(false);
+      rec = null;
+      const names = parseItems(splitSpoken(heard));
+      addInput.value = "";
+      autoGrow();
+      if (names.length) addNames(names, heard);
+    };
+    try { rec.start(); } catch { rec = null; setListening(false); }
+  });
+}
+
+// ---- Edit an item: name, quantity, note ----
+const editDialog = $("edit-dialog");
+let editing = null;
+let editQty = 1;
+const setQty = (n) => { editQty = Math.min(99, Math.max(1, n)); $("qty-val").textContent = editQty; };
+$("qty-minus").addEventListener("click", () => setQty(editQty - 1));
+$("qty-plus").addEventListener("click", () => setQty(editQty + 1));
+
+function openEdit(item) {
+  editing = item;
+  $("edit-name").value = item.name;
+  $("edit-note").value = item.note || "";
+  setQty(item.qty || 1);
+  editDialog.showModal();
+}
+
+$("edit-form").addEventListener("submit", (e) => {
+  e.preventDefault();
+  if (!editing) return;
+  const name = $("edit-name").value.trim().slice(0, 80);
+  if (!name) return;
+  const note = $("edit-note").value.trim().slice(0, 60);
+  updateDoc(doc(itemsRef, editing.id), {
+    name,
+    qty: editQty > 1 ? editQty : deleteField(),
+    note: note || deleteField(),
+  }).catch(() => setStatus("לא הצלחתי לשמור את השינויים", true));
+  editDialog.close();
+});
+$("edit-delete").addEventListener("click", () => {
+  if (!editing) return;
+  deleteDoc(doc(itemsRef, editing.id)).catch(() => setStatus("לא הצלחתי למחוק", true));
+  editDialog.close();
+});
+
+// ---- Who am I (shown on items I add) ----
+const nameDialog = $("name-dialog");
+function askName() { $("name-input").value = me; nameDialog.showModal(); }
+$("greeting").addEventListener("click", askName);
+$("greeting").addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") askName(); });
+$("name-form").addEventListener("submit", (e) => {
+  e.preventDefault();
+  me = $("name-input").value.trim().slice(0, 20);
+  try { localStorage.setItem("me", me); } catch {}
+  renderGreeting();
+  nameDialog.close();
+});
+$("name-skip").addEventListener("click", () => {
+  try { localStorage.setItem("meSkipped", "1"); } catch {}
+  nameDialog.close();
+});
+try {
+  if (!me && localStorage.getItem("meSkipped") !== "1") setTimeout(askName, 900);
+} catch {}
 
 $("clear-done").addEventListener("click", async () => {
   const ids = items.filter((i) => i.checked).map((i) => i.id);

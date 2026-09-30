@@ -6,25 +6,39 @@ service cloud.firestore {
     match /carts/{cartId}/items/{itemId} {
       allow get, list: if cartId.size() >= 16;
       allow create: if cartId.size() >= 16
-        && request.resource.data.keys().hasOnly(['name', 'checked', 'createdAt', 'category'])
+        && request.resource.data.keys().hasOnly(['name', 'checked', 'createdAt', 'category', 'qty', 'note', 'addedBy'])
         && request.resource.data.name is string
         && request.resource.data.name.size() > 0
         && request.resource.data.name.size() <= 80
         && request.resource.data.checked == false
         && request.resource.data.createdAt is number
         && request.resource.data.category is string
-        && request.resource.data.category.size() <= 20;
+        && request.resource.data.category.size() <= 20
+        && (!('qty' in request.resource.data)
+            || (request.resource.data.qty is int && request.resource.data.qty >= 1 && request.resource.data.qty <= 99))
+        && (!('note' in request.resource.data)
+            || (request.resource.data.note is string && request.resource.data.note.size() <= 60))
+        && (!('addedBy' in request.resource.data)
+            || (request.resource.data.addedBy is string && request.resource.data.addedBy.size() <= 20));
       allow update: if cartId.size() >= 16
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['checked', 'category'])
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['checked', 'category', 'name', 'qty', 'note'])
         && request.resource.data.checked is bool
+        && request.resource.data.name is string
+        && request.resource.data.name.size() > 0
+        && request.resource.data.name.size() <= 80
         && (!('category' in request.resource.data)
-            || (request.resource.data.category is string && request.resource.data.category.size() <= 20));
+            || (request.resource.data.category is string && request.resource.data.category.size() <= 20))
+        && (!('qty' in request.resource.data)
+            || (request.resource.data.qty is int && request.resource.data.qty >= 1 && request.resource.data.qty <= 99))
+        && (!('note' in request.resource.data)
+            || (request.resource.data.note is string && request.resource.data.note.size() <= 60));
       allow delete: if cartId.size() >= 16;
     }
 
     // Per-cart settings docs:
     //  prefs   - supermarket walking order + color theme
     //  learned - the family's corrections of product -> section (map of name -> section id)
+    //  history - how often each product was added (for the quick-add chips)
     match /carts/{cartId}/settings/{docId} {
       allow get: if cartId.size() >= 16;
       allow create, update: if cartId.size() >= 16
@@ -40,6 +54,11 @@ service cloud.firestore {
             && request.resource.data.keys().hasOnly(['map'])
             && request.resource.data.map is map
             && request.resource.data.map.size() <= 500)
+          ||
+          (docId == 'history'
+            && request.resource.data.keys().hasOnly(['items'])
+            && request.resource.data.items is map
+            && request.resource.data.items.size() <= 300)
         );
     }
   }
