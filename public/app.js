@@ -68,6 +68,8 @@ let items = [];
 let order = [...DEFAULT_ORDER];
 let buyStats = {}; // learnKey -> { n: name, c: times added, t: last added }
 let me = "";
+let collapsed = new Set();
+try { collapsed = new Set(JSON.parse(localStorage.getItem("collapsed") || "[]")); } catch {}
 try { me = localStorage.getItem("me") || ""; } catch {}
 
 const catOf = (item) => categoryById(item.category || classify(item.name));
@@ -85,6 +87,7 @@ function renderItem(item) {
   box.checked = item.checked;
   box.setAttribute("aria-label", item.name);
   box.addEventListener("change", () => {
+    if (box.checked) navigator.vibrate?.(14);
     updateDoc(doc(itemsRef, item.id), { checked: box.checked })
       .catch(() => setStatus("לא הצלחתי לעדכן, בדוק חיבור לאינטרנט", true));
   });
@@ -150,12 +153,31 @@ function render() {
     const section = document.createElement("section");
     section.className = "group";
     section.style.setProperty("--h", g.cat.hue);
-    const h = document.createElement("h3");
-    h.textContent = `${g.cat.emoji} ${g.cat.name} `;
+    const h = document.createElement("button");
+    h.type = "button";
+    h.className = "group-head";
+    const emo = document.createElement("span");
+    emo.className = "gh-emoji";
+    emo.textContent = g.cat.emoji;
+    const gname = document.createElement("span");
+    gname.className = "gh-name";
+    gname.textContent = g.cat.name;
     const count = document.createElement("span");
     count.className = "count";
     count.textContent = g.items.length;
-    h.append(count);
+    const chev = document.createElement("span");
+    chev.className = "chev";
+    chev.textContent = "⌄";
+    h.append(emo, gname, count, chev);
+    const isCollapsed = collapsed.has(g.cat.id);
+    section.classList.toggle("collapsed", isCollapsed);
+    h.setAttribute("aria-expanded", String(!isCollapsed));
+    h.addEventListener("click", () => {
+      const now = section.classList.toggle("collapsed");
+      h.setAttribute("aria-expanded", String(!now));
+      if (now) collapsed.add(g.cat.id); else collapsed.delete(g.cat.id);
+      try { localStorage.setItem("collapsed", JSON.stringify([...collapsed])); } catch {}
+    });
     const ul = document.createElement("ul");
     ul.append(...g.items.map(renderItem));
     section.append(h, ul);
@@ -165,7 +187,9 @@ function render() {
   $("done-list").replaceChildren(...done.map(renderItem));
   $("done-count").textContent = done.length ? `(${done.length})` : "";
   $("done-section").hidden = done.length === 0;
+  $("skeleton").hidden = true;
   $("empty").hidden = items.length > 0;
+  $("all-done").hidden = !(items.length > 0 && todo.length === 0);
   updateHero(todo.length, done.length);
   renderSuggestions();
 }
@@ -179,6 +203,10 @@ function updateHero(todoN, doneN) {
   $("ring-of").textContent = total ? "בעגלה" : "";
   $("summary").textContent = !total ? "הרשימה ריקה, בואו נתחיל" :
     todoN ? `${todoN} נשארו לקחת · ${doneN} כבר בעגלה` : "הכול בעגלה, כל הכבוד! 🎉";
+
+  $("mini-num").textContent = total ? `${doneN}/${total}` : "0";
+  $("mini-sum").textContent = total ? (todoN ? `${todoN} נשארו` : "הכול בעגלה 🎉") : "העגלה ריקה";
+  $("mini-fill").style.width = total ? `${(doneN / total) * 100}%` : "0";
 
   // Celebrate the moment the last item gets checked off (not on first load).
   if (prevTodo !== null && prevTodo > 0 && todoN === 0 && total > 0) confetti();
@@ -426,7 +454,7 @@ if (SR) {
   let heard = "";
   const setListening = (on) => {
     mic.classList.toggle("listening", on);
-    addInput.placeholder = on ? "מקשיב... אמרו מה חסר" : "מה חסר? אפשר כמה יחד";
+    addInput.placeholder = on ? "מקשיב... אמרו מה חסר" : "מה חסר בבית?";
   };
   mic.addEventListener("click", () => {
     if (rec) { rec.stop(); return; }
@@ -511,6 +539,7 @@ try {
   if (!me && localStorage.getItem("meSkipped") !== "1") setTimeout(askName, 900);
 } catch {}
 
+$("all-done-clear").addEventListener("click", () => $("clear-done").click());
 $("clear-done").addEventListener("click", async () => {
   const ids = items.filter((i) => i.checked).map((i) => i.id);
   if (!ids.length || !confirm("למחוק את כל המוצרים שכבר בעגלה?")) return;
@@ -602,3 +631,7 @@ $("hint").hidden = hintSeen;
 const dismissHint = () => { $("hint").hidden = true; try { localStorage.setItem("hintSeen", "1"); } catch {} };
 $("hint-x").addEventListener("click", dismissHint);
 $("hint-go").addEventListener("click", () => { dismissHint(); openConnect(); });
+
+// ---- Compact bar that appears once the big header scrolls away ----
+new IntersectionObserver(([e]) => document.body.classList.toggle("scrolled", !e.isIntersecting), { threshold: 0 })
+  .observe(document.querySelector(".hero"));

@@ -50,7 +50,14 @@
         <span>🧭</span> סדר הסופר
       </button>
     </div>
+    <svg class="wave" viewBox="0 0 1440 60" preserveAspectRatio="none" aria-hidden="true"><path d="M0,34 C220,64 470,6 730,30 C990,54 1210,8 1440,34 L1440,60 L0,60Z"/></svg>
   </header>
+
+  <div id="mini" class="mini" aria-hidden="true">
+    <span class="mini-title">🛒 <b id="mini-num">0/0</b></span>
+    <span id="mini-sum" class="mini-sum"></span>
+    <div class="mini-bar"><i id="mini-fill"></i></div>
+  </div>
 
   <main>
     <p id="status" role="status"></p>
@@ -65,6 +72,15 @@
       <h2 class="sugg-title">⚡ הוספה מהירה</h2>
       <div id="sugg-row" class="sugg-row"></div>
     </section>
+
+    <div id="skeleton" class="skeleton" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
+
+    <div id="all-done" class="all-done" hidden>
+      <div class="ad-emoji">🎉</div>
+      <h2>הכול בעגלה!</h2>
+      <p>כל הכבוד. אפשר לנקות ולהתחיל רשימה חדשה.</p>
+      <button type="button" id="all-done-clear">נקה והתחל מחדש</button>
+    </div>
 
     <div id="empty" class="empty" hidden>
       <div class="empty-art" aria-hidden="true">
@@ -87,7 +103,7 @@
   </main>
 
   <form id="add-form" class="add-bar" autocomplete="off">
-    <textarea id="add-input" rows="1" maxlength="2000" placeholder="מה חסר? אפשר כמה יחד" aria-label="מוצרים להוספה" required></textarea>
+    <textarea id="add-input" rows="1" maxlength="2000" placeholder="מה חסר בבית?" aria-label="מוצרים להוספה" required></textarea>
     <button type="button" id="mic" class="mic" aria-label="הקלטה קולית" hidden>
       <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="3" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>
     </button>
