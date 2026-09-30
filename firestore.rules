@@ -6,16 +6,30 @@ service cloud.firestore {
     match /carts/{cartId}/items/{itemId} {
       allow get, list: if cartId.size() >= 16;
       allow create: if cartId.size() >= 16
-        && request.resource.data.keys().hasOnly(['name', 'checked', 'createdAt'])
+        && request.resource.data.keys().hasOnly(['name', 'checked', 'createdAt', 'category'])
         && request.resource.data.name is string
         && request.resource.data.name.size() > 0
         && request.resource.data.name.size() <= 80
         && request.resource.data.checked == false
-        && request.resource.data.createdAt is number;
+        && request.resource.data.createdAt is number
+        && request.resource.data.category is string
+        && request.resource.data.category.size() <= 20;
       allow update: if cartId.size() >= 16
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['checked'])
-        && request.resource.data.checked is bool;
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['checked', 'category'])
+        && request.resource.data.checked is bool
+        && (!('category' in request.resource.data)
+            || (request.resource.data.category is string && request.resource.data.category.size() <= 20));
       allow delete: if cartId.size() >= 16;
+    }
+
+    // Per-cart preferences: the family's supermarket walking order.
+    match /carts/{cartId}/settings/{docId} {
+      allow get: if cartId.size() >= 16;
+      allow create, update: if cartId.size() >= 16
+        && docId == 'prefs'
+        && request.resource.data.keys().hasOnly(['order'])
+        && request.resource.data.order is list
+        && request.resource.data.order.size() <= 30;
     }
   }
 }
