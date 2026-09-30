@@ -87,7 +87,11 @@ onSnapshot(
     $("done-list").replaceChildren(...done.map(renderItem));
     $("done-count").textContent = done.length ? `(${done.length})` : "";
     $("done-section").hidden = done.length === 0;
-    setStatus(items.length ? "" : "העגלה ריקה. הוסף את המוצר הראשון 👆");
+    $("empty").hidden = items.length > 0;
+    $("progress-bar").style.width = items.length ? `${(done.length / items.length) * 100}%` : "0";
+    $("summary").textContent = !items.length ? "" :
+      todo.length ? `${todo.length} נשארו לקחת · ${done.length} כבר בעגלה` : "הכול בעגלה 🎉";
+    setStatus("");
   },
   (err) => {
     console.error(err);
