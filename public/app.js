@@ -51,28 +51,34 @@ const catOf = (item) => categoryById(item.category || classify(item.name));
 
 // ---- Render ----
 function renderItem(item) {
+  const cat = catOf(item);
   const li = document.createElement("li");
   li.className = item.checked ? "done" : "";
+  li.style.setProperty("--h", cat.hue);
 
-  const label = document.createElement("label");
   const box = document.createElement("input");
   box.type = "checkbox";
+  box.id = "c-" + item.id;
   box.checked = item.checked;
+  box.setAttribute("aria-label", item.name);
   box.addEventListener("change", () => {
     updateDoc(doc(itemsRef, item.id), { checked: box.checked })
       .catch(() => setStatus("לא הצלחתי לעדכן, בדוק חיבור לאינטרנט", true));
   });
+
+  const tile = document.createElement("button");
+  tile.type = "button";
+  tile.className = "tile";
+  tile.textContent = cat.emoji;
+  tile.setAttribute("aria-label", `מחלקה: ${cat.name}. לחץ לשינוי`);
+  tile.addEventListener("click", () => openPicker(item));
+
+  const label = document.createElement("label");
+  label.htmlFor = box.id;
   const name = document.createElement("span");
   name.className = "name";
   name.textContent = item.name; // textContent: never HTML
-  label.append(box, name);
-
-  const chip = document.createElement("button");
-  chip.type = "button";
-  chip.className = "chip";
-  chip.textContent = catOf(item).emoji;
-  chip.setAttribute("aria-label", `קטגוריה: ${catOf(item).name}. לחץ לשינוי`);
-  chip.addEventListener("click", () => openPicker(item));
+  label.append(name);
 
   const del = document.createElement("button");
   del.type = "button";
@@ -84,7 +90,7 @@ function renderItem(item) {
       .catch(() => setStatus("לא הצלחתי למחוק", true));
   });
 
-  li.append(label, chip, del);
+  li.append(box, tile, label, del);
   return li;
 }
 
@@ -100,8 +106,13 @@ function render() {
   $("list").replaceChildren(...groups.map((g) => {
     const section = document.createElement("section");
     section.className = "group";
+    section.style.setProperty("--h", g.cat.hue);
     const h = document.createElement("h3");
-    h.textContent = `${g.cat.emoji} ${g.cat.name}`;
+    h.textContent = `${g.cat.emoji} ${g.cat.name} `;
+    const count = document.createElement("span");
+    count.className = "count";
+    count.textContent = g.items.length;
+    h.append(count);
     const ul = document.createElement("ul");
     ul.append(...g.items.map(renderItem));
     section.append(h, ul);
@@ -112,9 +123,46 @@ function render() {
   $("done-count").textContent = done.length ? `(${done.length})` : "";
   $("done-section").hidden = done.length === 0;
   $("empty").hidden = items.length > 0;
-  $("progress-bar").style.width = items.length ? `${(done.length / items.length) * 100}%` : "0";
-  $("summary").textContent = !items.length ? "" :
-    todo.length ? `${todo.length} נשארו לקחת · ${done.length} כבר בעגלה` : "הכול בעגלה 🎉";
+  updateHero(todo.length, done.length);
+}
+
+const RING_LEN = 226.2; // 2 * PI * r(36)
+
+function updateHero(todoN, doneN) {
+  const total = todoN + doneN;
+  $("ring-fg").style.strokeDashoffset = RING_LEN * (1 - (total ? doneN / total : 0));
+  $("ring-num").textContent = total ? `${doneN}/${total}` : "0";
+  $("ring-of").textContent = total ? "בעגלה" : "";
+  $("summary").textContent = !total ? "הרשימה ריקה, בואו נתחיל" :
+    todoN ? `${todoN} נשארו לקחת · ${doneN} כבר בעגלה` : "הכול בעגלה, כל הכבוד! 🎉";
+
+  // Celebrate the moment the last item gets checked off (not on first load).
+  if (prevTodo !== null && prevTodo > 0 && todoN === 0 && total > 0) confetti();
+  prevTodo = todoN;
+}
+let prevTodo = null;
+
+function greeting() {
+  const h = new Date().getHours();
+  return h < 5 ? "לילה טוב" : h < 12 ? "בוקר טוב" : h < 17 ? "צהריים טובים" : h < 21 ? "ערב טוב" : "לילה טוב";
+}
+$("greeting").textContent = greeting() + " 👋";
+
+function confetti() {
+  const box = $("confetti");
+  const glyphs = ["🎉", "✨", "🥕", "🍎", "🥛", "🍞", "⭐", "🧀"];
+  for (let i = 0; i < 36; i++) {
+    const p = document.createElement("span");
+    p.className = "piece";
+    p.textContent = glyphs[i % glyphs.length];
+    p.style.left = Math.random() * 100 + "%";
+    p.style.setProperty("--dx", (Math.random() * 160 - 80) + "px");
+    p.style.setProperty("--rot", (Math.random() * 900 - 450) + "deg");
+    p.style.setProperty("--dur", (2 + Math.random() * 1.6) + "s");
+    p.style.animationDelay = Math.random() * 0.5 + "s";
+    box.append(p);
+    setTimeout(() => p.remove(), 4500);
+  }
 }
 
 onSnapshot(
@@ -146,6 +194,7 @@ function openPicker(item) {
     const b = document.createElement("button");
     b.type = "button";
     b.className = "pick" + (c.id === catOf(item).id ? " current" : "");
+    b.style.setProperty("--h", c.hue);
     b.textContent = `${c.emoji} ${c.name}`;
     b.addEventListener("click", () => {
       updateDoc(doc(itemsRef, item.id), { category: c.id })
@@ -165,6 +214,7 @@ function renderOrderDialog() {
     const c = categoryById(id);
     const li = document.createElement("li");
     li.className = "order-row";
+    li.style.setProperty("--h", c.hue);
     const label = document.createElement("span");
     label.textContent = `${c.emoji} ${c.name}`;
     const up = document.createElement("button");
