@@ -9,7 +9,16 @@ const MAX_NAME = 80;
 // so words that genuinely start with ו (וופל, וודקה, ...) stay intact.
 export function parseItems(text) {
   const pieces = String(text)
-    .split(/[\n\r,،;•·|+]+/)
+    .split(/\r?\n/)
+    .flatMap((line) => {
+      // WhatsApp export prefix: "[13:15, 9/9/2026] אמא Mom: ..." (also without brackets)
+      line = line.replace(/^\s*\[?\d{1,2}:\d{2}(?::\d{2})?[,\s]+\d{1,2}[./]\d{1,2}[./]\d{2,4}\]?\s*-?\s*[^:]{1,40}:\s*/, "");
+      // A short line that ends with ":" is a heading ("סופר:"), not a product.
+      if (/^[^:]{1,25}:\s*$/.test(line) && line.trim().split(/\s+/).length <= 3) return [];
+      // Commas inside parentheses belong to the same item: "שתייה (קולה, זירו)".
+      line = line.replace(/\(([^)]*)\)/g, (_, inner) => "(" + inner.replace(/[,;،]+/g, " /") + ")");
+      return line.split(/[,،;•·|+?؟]+/);
+    })
     .map(cleanPiece)
     .filter(Boolean);
 
@@ -54,7 +63,7 @@ function cleanPiece(p) {
 // "3 חלב" / "חלב x3" -> { name: "חלב", qty: 3 }. Leaves "חלב 3%" and "2 ליטר מים" alone.
 const UNIT = /^(ליטר|ליטרים|קילו|ק"ג|קג|גרם|גר|מ"ל|מל|יח|יחידות)/;
 export function splitQty(text) {
-  const lead = text.match(/^(\d{1,2})\s+(.+)$/);
+  const lead = text.match(/^(\d{1,2})(?:\s*[-–]\s*\d{1,2})?\s+(.+)$/);
   if (lead && !UNIT.test(lead[2]) && !lead[2].startsWith("%")) {
     const qty = Number(lead[1]);
     if (qty >= 1) return { name: lead[2].trim(), qty };
