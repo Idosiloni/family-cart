@@ -70,8 +70,9 @@ svg { display: block; flex: none; }
 /* ---------- Summary ---------- */
 .top { max-width: 640px; margin: 0 auto; padding: 18px 16px 0; }
 .sum-row { display: flex; flex-direction: column; gap: 14px; }
-.sum-actions { display: flex; gap: 8px; }
-.sum-actions #shop-btn { flex: 1; }
+.sum-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.sum-actions #shop-btn { flex: 1 0 100%; min-height: 52px; }
+.sum-actions .alt { flex: 1; }
 .greet { margin: 0; font-size: 15px; font-weight: 500; color: var(--mut); cursor: pointer; width: fit-content; }
 .remain { display: flex; align-items: baseline; gap: 10px; margin: 2px 0 0; }
 .rm-n { font-size: 56px; font-weight: 700; line-height: 1; letter-spacing: -.03em; color: var(--accent); }
@@ -318,3 +319,12 @@ dialog.shop::backdrop { background: var(--bg); }
 .shop-fin p { margin: 0 0 8px; color: var(--mut); }
 .shop-fin .ad-mark { background: linear-gradient(135deg, var(--accent), var(--accent2)); color: var(--on-accent); border-color: transparent; }
 .toast { position: fixed; inset-inline: auto; left: 50%; bottom: calc(env(safe-area-inset-bottom) + 96px); transform: translateX(-50%); z-index: 60; max-width: min(90vw, 420px); padding: 12px 18px; border-radius: 99px; font-size: 15px; font-weight: 600; color: var(--text); background: color-mix(in srgb, var(--bg2) 94%, transparent); border: 1px solid var(--line); box-shadow: var(--shadow); -webkit-backdrop-filter: var(--blur); backdrop-filter: var(--blur); }
+.shop-time { font-size: 14px; font-weight: 600; color: var(--mut); font-variant-numeric: tabular-nums; direction: ltr; }
+.shop-prev-trip { font-size: 14px; }
+.toast { display: flex; align-items: center; gap: 14px; }
+.toast button { flex: none; border: 0; background: none; padding: 8px 4px; min-height: 40px; font: 700 15px var(--sans); color: var(--accent); cursor: pointer; }
+li { position: relative; touch-action: pan-y; }
+li.swiping { transition: none; animation: none; }
+li.sw-check { background: color-mix(in srgb, var(--accent) 22%, transparent); }
+li.sw-del { background: color-mix(in srgb, var(--danger) 24%, transparent); }
+li.armed { box-shadow: inset 0 0 0 2px currentColor; }

@@ -7,6 +7,7 @@
 //  - keyword with a space is a phrase matched from the start of a word
 //  - the longest matching keyword wins ("שוקולד חלב" → snacks, "חלב שקדים" → dairy)
 import { EXTRA, BRANDS } from "./catalog.js";
+import { NEW_SECTIONS, MOVES, BRAND_MOVES, EXTRA_IL, BRANDS_IL } from "./catalog-il.js";
 
 export const CATEGORIES = [
   { id: "produce", bg: "#5CF2A0", fg: "#0B0F1A", icon: "produce", hue: 140, emoji: "🥬", name: "פירות וירקות",
@@ -34,11 +35,39 @@ export const CATEGORIES = [
   { id: "other", bg: "#AAB3CC", fg: "#0B0F1A", icon: "other", hue: 100, emoji: "🛍️", name: "אחר", keywords: [] },
 ];
 
+// Finer Israeli sections slot into the walking order next to their parent section.
+for (const s of NEW_SECTIONS) {
+  const { after, ...section } = s;
+  CATEGORIES.splice(CATEGORIES.findIndex((c) => c.id === after) + 1, 0, { ...section, keywords: [] });
+}
+
+// Brands: the new sections take over their own brands first, then the Israeli additions are merged in.
+for (const [to, { from, words }] of Object.entries(BRAND_MOVES)) {
+  BRANDS[from] = (BRANDS[from] || []).filter((b) => !words.includes(b));
+  BRANDS[to] = [...new Set([...(BRANDS[to] || []), ...words])];
+}
+for (const [id, list] of Object.entries(BRANDS_IL)) BRANDS[id] = [...new Set([...(BRANDS[id] || []), ...list])];
+
 // Merge the extra vocabulary; brand names move to their own low-priority rules.
 for (const c of CATEGORIES) {
   const brands = new Set(BRANDS[c.id] || []);
-  c.keywords = [...new Set([...c.keywords, ...(EXTRA[c.id] || [])])].filter((k) => !brands.has(k));
+  c.keywords = [...new Set([...c.keywords, ...(EXTRA[c.id] || []), ...(EXTRA_IL[c.id] || [])])].filter((k) => !brands.has(k));
 }
+// Words that now belong to a finer section leave their old one (explicit additions above stay where they were put).
+const added = (id) => new Set(EXTRA_IL[id] || []);
+for (const m of MOVES) {
+  const target = CATEGORIES.find((c) => c.id === m.to);
+  for (const fromId of m.from) {
+    const src = CATEGORIES.find((c) => c.id === fromId);
+    const keep = [];
+    for (const k of src.keywords) {
+      if (!added(fromId).has(k) && m.re.test(k) && !(m.not && m.not.test(k))) target.keywords.push(k);
+      else keep.push(k);
+    }
+    src.keywords = keep;
+  }
+}
+for (const c of CATEGORIES) c.keywords = [...new Set(c.keywords)];
 
 export const DEFAULT_ORDER = CATEGORIES.map((c) => c.id);
 const byId = new Map(CATEGORIES.map((c) => [c.id, c]));
@@ -121,6 +150,12 @@ export function rememberLocally(name, id) {
 // Stored order may be missing new categories or contain removed ones.
 export function normalizeOrder(saved) {
   const valid = Array.isArray(saved) ? saved.filter((id) => byId.has(id)) : [];
-  const unique = [...new Set(valid)];
-  return [...unique, ...DEFAULT_ORDER.filter((id) => !unique.includes(id))];
+  const result = [...new Set(valid)];
+  // A section the family has never seen (added later) goes right after its default neighbour, not at the very end.
+  DEFAULT_ORDER.forEach((id, i) => {
+    if (result.includes(id)) return;
+    const prev = i ? result.indexOf(DEFAULT_ORDER[i - 1]) : -1;
+    result.splice(prev + 1, 0, id);
+  });
+  return result;
 }

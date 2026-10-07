@@ -88,6 +88,38 @@ document.querySelectorAll("[data-icon-label]").forEach((el) => el.prepend(icon(e
 const catOf = (item) => categoryById(item.category || classify(item.name));
 
 // ---- Render ----
+// Swipe a row right to check it off, left to delete it (with undo).
+function attachSwipe(li, item) {
+  let x0 = null, y0 = 0, dx = 0, live = false;
+  const reset = () => { x0 = null; live = false; li.classList.remove("swiping", "sw-check", "sw-del", "armed"); li.style.transform = ""; };
+  li.addEventListener("pointerdown", (e) => {
+    if (e.target.closest("button, input")) return;
+    x0 = e.clientX; y0 = e.clientY; dx = 0; live = false;
+  });
+  li.addEventListener("pointermove", (e) => {
+    if (x0 === null) return;
+    const mx = e.clientX - x0, my = e.clientY - y0;
+    if (!live) {
+      if (Math.abs(mx) > 10 && Math.abs(mx) > Math.abs(my) * 1.5) { live = true; li.setPointerCapture(e.pointerId); li.classList.add("swiping"); }
+      else { if (Math.abs(my) > 10) x0 = null; return; }
+    }
+    dx = mx;
+    li.style.transform = `translateX(${dx}px)`;
+    li.classList.toggle("sw-check", dx > 0);
+    li.classList.toggle("sw-del", dx < 0);
+    li.classList.toggle("armed", Math.abs(dx) > 90);
+  });
+  li.addEventListener("pointerup", () => {
+    if (x0 === null) return;
+    const fire = live && Math.abs(dx) > 90, right = dx > 0;
+    if (live) { const stop = (e) => { e.preventDefault(); e.stopPropagation(); }; li.addEventListener("click", stop, { capture: true, once: true }); setTimeout(() => li.removeEventListener("click", stop, true), 50); }
+    reset();
+    if (!fire) return;
+    if (right) toggleItem(item, !item.checked); else deleteWithUndo([item], `${item.name} נמחק`);
+  });
+  li.addEventListener("pointercancel", reset);
+}
+
 function renderItem(item) {
   const li = document.createElement("li");
   li.className = item.checked ? "done" : "";
@@ -136,12 +168,10 @@ function renderItem(item) {
   del.className = "ibtn";
   del.setAttribute("aria-label", "מחק " + item.name);
   del.append(icon("close", 18));
-  del.addEventListener("click", () => {
-    deleteDoc(doc(itemsRef, item.id))
-      .catch(() => setStatus("לא הצלחתי למחוק", true));
-  });
+  del.addEventListener("click", () => deleteWithUndo([item], `${item.name} נמחק`));
 
   li.append(box, label, edit, del);
+  attachSwipe(li, item);
   return li;
 }
 
@@ -299,19 +329,50 @@ function confetti() {
 }
 
 let loaded = false;
-function toast(text) {
+function toast(text, action) {
+  document.querySelectorAll(".toast").forEach((t) => t.remove());
   const el = document.createElement("div");
   el.className = "toast";
   el.setAttribute("role", "status");
-  el.textContent = text;
+  const span = document.createElement("span");
+  span.textContent = text;
+  el.append(span);
+  const gone = () => el.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 200 }).finished.then(() => el.remove(), () => el.remove());
+  if (action) {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.textContent = action.label;
+    b.addEventListener("click", () => { clearTimeout(timer); action.run(); gone(); });
+    el.append(b);
+  }
   (shopDlg.open ? shopDlg : document.body).append(el);
   el.animate([{ opacity: 0, transform: "translate(-50%, 12px)" }, { opacity: 1, transform: "translate(-50%, 0)" }], { duration: 220, easing: "cubic-bezier(.19, 1, .22, 1)" });
-  setTimeout(() => el.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 200 }).finished.then(() => el.remove(), () => el.remove()), 3200);
+  const timer = setTimeout(gone, action ? 6000 : 3200);
+}
+
+// Delete now, offer to bring it back. Rules only allow creating unchecked items, so checked ones are re-checked afterwards.
+async function restoreItems(list) {
+  const batch = writeBatch(db);
+  list.forEach(({ id, ...data }) => batch.set(doc(itemsRef, id), { ...data, checked: false }));
+  await batch.commit();
+  const was = list.filter((i) => i.checked);
+  if (was.length) {
+    const b2 = writeBatch(db);
+    was.forEach((i) => b2.update(doc(itemsRef, i.id), { checked: true }));
+    await b2.commit();
+  }
+}
+function deleteWithUndo(list, label) {
+  const keep = list.map((i) => ({ ...i }));
+  const batch = writeBatch(db);
+  list.forEach((i) => batch.delete(doc(itemsRef, i.id)));
+  batch.commit().catch(() => setStatus("לא הצלחתי למחוק", true));
+  toast(label, { label: "ביטול", run: () => restoreItems(keep).catch(() => setStatus("לא הצלחתי לשחזר", true)) });
 }
 
 // ---- Shopping mode: one section at a time, in store-walking order ----
 const shopDlg = $("shop-dialog");
-const shop = { idx: 0, left: new Map(), timer: 0, wake: null, dir: 0 };
+const shop = { idx: 0, left: new Map(), timer: 0, wake: null, dir: 0, start: 0, startDone: 0, tick: 0, summary: null, prev: null };
 const reduceMotionQ = matchMedia("(prefers-reduced-motion: reduce)");
 
 function shopSections() {
@@ -392,7 +453,7 @@ function renderShop() {
     b.style.setProperty("--cc", s.cat.bg);
     b.setAttribute("aria-label", s.cat.name + (s.todo.length ? `, נשארו ${s.todo.length}` : ", הושלם"));
     if (i === shop.idx) b.setAttribute("aria-current", "step");
-    b.addEventListener("click", () => { shop.dir = Math.sign(i - shop.idx); shop.idx = i; renderShop(); });
+    b.addEventListener("click", () => { clearTimeout(shop.timer); shop.dir = Math.sign(i - shop.idx); shop.idx = i; renderShop(); });
     return b;
   }));
 
@@ -419,13 +480,29 @@ function renderShop() {
     const t = document.createElement("h3");
     t.textContent = "הכול בעגלה";
     const p = document.createElement("p");
-    p.textContent = "כל הכבוד, סיימתם את הקניות.";
+    if (!shop.summary && shop.start) {
+      const n = items.filter((i) => i.checked).length - shop.startDone;
+      if (n > 0) {
+        const min = Math.max(1, Math.round((Date.now() - shop.start) / 60000));
+        shop.summary = { n, min };
+        try {
+          const trips = JSON.parse(localStorage.getItem("trips") || "[]");
+          shop.prev = trips[0] || null;
+          trips.unshift({ t: Date.now(), n, min });
+          localStorage.setItem("trips", JSON.stringify(trips.slice(0, 20)));
+        } catch {}
+      }
+    }
+    p.textContent = shop.summary ? `${shop.summary.n} מוצרים ב-${shop.summary.min} דקות` : "כל הכבוד, סיימתם את הקניות.";
+    const prevP = document.createElement("p");
+    prevP.className = "shop-prev-trip";
+    if (shop.summary && shop.prev) prevP.textContent = `בפעם הקודמת: ${shop.prev.n} מוצרים ב-${shop.prev.min} דקות`;
     const done = document.createElement("button");
     done.type = "button";
     done.className = "btn";
     done.textContent = "סיום";
     done.addEventListener("click", () => { shopDlg.close(); confetti(); });
-    fin.append(mark, t, p, done);
+    fin.append(mark, t, p, ...(prevP.textContent ? [prevP] : []), done);
     body.replaceChildren(fin);
   } else {
     body.replaceChildren(head, ...sec.todo.map(shopRow), ...sec.done.map(shopRow));
@@ -445,7 +522,6 @@ function renderShop() {
   // Finished this section by checking the last item: move on to the next one that still has something to grab.
   const prevLeft = shop.left.get(sec.cat.id);
   shop.left.set(sec.cat.id, sec.todo.length);
-  clearTimeout(shop.timer);
   if (prevLeft > 0 && sec.todo.length === 0 && remaining) {
     shop.timer = setTimeout(() => {
       const now = shopSections();
@@ -465,14 +541,36 @@ $("shop-btn").addEventListener("click", () => {
   shop.idx = Math.max(0, secs.findIndex((s) => s.todo.length));
   shop.left = new Map(secs.map((s) => [s.cat.id, s.todo.length]));
   shop.dir = 0;
+  shop.start = Date.now();
+  shop.startDone = items.filter((i) => i.checked).length;
+  shop.summary = null;
+  shop.prev = null;
   renderShop();
   shopDlg.showModal();
   keepAwake();
+  const time = $("shop-time");
+  const draw = () => { const s = Math.floor((Date.now() - shop.start) / 1000); time.textContent = `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`; };
+  draw();
+  clearInterval(shop.tick);
+  shop.tick = setInterval(draw, 1000);
+});
+$("send-btn").addEventListener("click", async () => {
+  const secs = shopSections().filter((s) => s.todo.length);
+  const left = secs.reduce((n, s) => n + s.todo.length, 0);
+  if (!left) { toast("הכול כבר בעגלה, אין מה לשלוח"); return; }
+  const lines = [`העגלה המשפחתית, נשארו ${left}:`];
+  secs.forEach((s) => {
+    lines.push("", `*${s.cat.name}*`);
+    s.todo.forEach((i) => lines.push(`• ${i.name}${i.qty > 1 ? " ×" + i.qty : ""}${i.note ? ` (${i.note})` : ""}`));
+  });
+  const text = lines.join("\n");
+  if (navigator.share) { try { await navigator.share({ text }); } catch {} return; }
+  window.open("https://wa.me/?text=" + encodeURIComponent(text), "_blank", "noopener");
 });
 $("shop-close").addEventListener("click", () => shopDlg.close());
-$("shop-prev").addEventListener("click", () => { shop.dir = -1; shop.idx--; renderShop(); });
-$("shop-next").addEventListener("click", () => { shop.dir = 1; shop.idx++; renderShop(); });
-shopDlg.addEventListener("close", () => { clearTimeout(shop.timer); shop.wake?.release?.().catch(() => {}); shop.wake = null; });
+$("shop-prev").addEventListener("click", () => { clearTimeout(shop.timer); shop.dir = -1; shop.idx--; renderShop(); });
+$("shop-next").addEventListener("click", () => { clearTimeout(shop.timer); shop.dir = 1; shop.idx++; renderShop(); });
+shopDlg.addEventListener("close", () => { clearTimeout(shop.timer); clearInterval(shop.tick); shop.wake?.release?.().catch(() => {}); shop.wake = null; });
 document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible" && shopDlg.open) keepAwake(); });
 
 onSnapshot(
@@ -760,7 +858,7 @@ $("edit-cat").addEventListener("click", () => {
 });
 $("edit-delete").addEventListener("click", () => {
   if (!editing) return;
-  deleteDoc(doc(itemsRef, editing.id)).catch(() => setStatus("לא הצלחתי למחוק", true));
+  deleteWithUndo([editing], `${editing.name} נמחק`);
   editDialog.close();
 });
 
@@ -785,17 +883,9 @@ try {
 } catch {}
 
 $("all-done-clear").addEventListener("click", () => $("clear-done").click());
-$("clear-done").addEventListener("click", async () => {
-  const ids = items.filter((i) => i.checked).map((i) => i.id);
-  if (!ids.length || !confirm("למחוק את כל המוצרים שכבר בעגלה?")) return;
-  try {
-    const batch = writeBatch(db);
-    ids.forEach((id) => batch.delete(doc(itemsRef, id)));
-    await batch.commit();
-  } catch (err) {
-    console.error(err);
-    setStatus("לא הצלחתי לנקות", true);
-  }
+$("clear-done").addEventListener("click", () => {
+  const done = items.filter((i) => i.checked);
+  if (done.length) deleteWithUndo(done, `${done.length} מוצרים נמחקו`);
 });
 
 // ---- Themes (shared through prefs; localStorage avoids a flash of the default) ----
