@@ -233,6 +233,7 @@ function render() {
   renderSuggestions();
   if (focusedBox) document.getElementById(focusedBox)?.focus({ preventScroll: true });
   playFlip(first);
+  if (shopDlg.open) renderShop();
 }
 
 // Counter feel: tween the big numeral to its new value.
@@ -297,10 +298,195 @@ function confetti() {
   }
 }
 
+let loaded = false;
+function toast(text) {
+  const el = document.createElement("div");
+  el.className = "toast";
+  el.setAttribute("role", "status");
+  el.textContent = text;
+  (shopDlg.open ? shopDlg : document.body).append(el);
+  el.animate([{ opacity: 0, transform: "translate(-50%, 12px)" }, { opacity: 1, transform: "translate(-50%, 0)" }], { duration: 220, easing: "cubic-bezier(.19, 1, .22, 1)" });
+  setTimeout(() => el.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 200 }).finished.then(() => el.remove(), () => el.remove()), 3200);
+}
+
+// ---- Shopping mode: one section at a time, in store-walking order ----
+const shopDlg = $("shop-dialog");
+const shop = { idx: 0, left: new Map(), timer: 0, wake: null, dir: 0 };
+const reduceMotionQ = matchMedia("(prefers-reduced-motion: reduce)");
+
+function shopSections() {
+  return order.map((id) => {
+    const its = items.filter((i) => catOf(i).id === id);
+    return { cat: categoryById(id), todo: its.filter((i) => !i.checked), done: its.filter((i) => i.checked) };
+  }).filter((s) => s.todo.length + s.done.length);
+}
+
+function toggleItem(item, checked) {
+  if (checked) navigator.vibrate?.(14);
+  updateDoc(doc(itemsRef, item.id), { checked })
+    .catch(() => setStatus("לא הצלחתי לעדכן, בדוק חיבור לאינטרנט", true));
+}
+
+function shopRow(item) {
+  const row = document.createElement("div");
+  row.className = "shop-row" + (item.checked ? " done" : "");
+  row.setAttribute("role", "checkbox");
+  row.setAttribute("aria-checked", String(item.checked));
+  row.tabIndex = 0;
+  const mark = document.createElement("span");
+  mark.className = "shop-mark";
+  mark.append(icon("check", 20));
+  const name = document.createElement("span");
+  name.className = "shop-name";
+  name.textContent = item.name;
+  if (item.qty > 1) {
+    const q = document.createElement("span");
+    q.className = "qty";
+    q.textContent = "×" + item.qty;
+    name.append(q);
+  }
+  row.append(mark, name);
+  if (item.note) {
+    const n = document.createElement("span");
+    n.className = "shop-note";
+    n.textContent = item.note;
+    name.append(n);
+  }
+  const flip = () => toggleItem(item, !item.checked);
+  let x0 = null, dx = 0;
+  row.addEventListener("pointerdown", (e) => { x0 = e.clientX; dx = 0; row.setPointerCapture(e.pointerId); });
+  row.addEventListener("pointermove", (e) => {
+    if (x0 === null) return;
+    dx = e.clientX - x0;
+    if (Math.abs(dx) < 6) return;
+    row.style.transform = `translateX(${dx}px)`;
+    row.classList.toggle("armed", Math.abs(dx) > 90);
+  });
+  const end = () => {
+    if (x0 === null) return;
+    const swiped = Math.abs(dx) > 90, moved = Math.abs(dx) >= 6;
+    x0 = null;
+    row.classList.remove("armed");
+    row.style.transform = "";
+    if (swiped || !moved) flip();
+  };
+  row.addEventListener("pointerup", end);
+  row.addEventListener("pointercancel", () => { x0 = null; row.classList.remove("armed"); row.style.transform = ""; });
+  row.addEventListener("keydown", (e) => { if (e.key === " " || e.key === "Enter") { e.preventDefault(); flip(); } });
+  return row;
+}
+
+function renderShop() {
+  const secs = shopSections();
+  if (!secs.length) { shopDlg.close(); return; }
+  shop.idx = Math.min(Math.max(shop.idx, 0), secs.length - 1);
+  const sec = secs[shop.idx];
+  const remaining = secs.reduce((n, s) => n + s.todo.length, 0);
+  const focusedKey = document.activeElement?.closest?.("#shop-body .shop-row") ? [...document.querySelectorAll("#shop-body .shop-row")].indexOf(document.activeElement) : -1;
+
+  $("shop-pos").textContent = remaining ? `${shop.idx + 1} מתוך ${secs.length}` : "";
+  $("shop-dots").replaceChildren(...secs.map((s, i) => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "shop-dot" + (i === shop.idx ? " cur" : "") + (s.todo.length ? "" : " full");
+    b.style.setProperty("--cc", s.cat.bg);
+    b.setAttribute("aria-label", s.cat.name + (s.todo.length ? `, נשארו ${s.todo.length}` : ", הושלם"));
+    if (i === shop.idx) b.setAttribute("aria-current", "step");
+    b.addEventListener("click", () => { shop.dir = Math.sign(i - shop.idx); shop.idx = i; renderShop(); });
+    return b;
+  }));
+
+  const head = document.createElement("div");
+  head.className = "shop-head";
+  head.style.setProperty("--cc", sec.cat.bg);
+  const tile = tileEl(sec.cat, 26);
+  tile.classList.add("shop-tile");
+  const titles = document.createElement("div");
+  const h = document.createElement("h3");
+  h.textContent = sec.cat.name;
+  const sub = document.createElement("p");
+  sub.textContent = sec.todo.length ? `נשארו ${sec.todo.length}` : "הכול נלקח";
+  titles.append(h, sub);
+  head.append(tile, titles);
+
+  const body = $("shop-body");
+  if (!remaining) {
+    const fin = document.createElement("div");
+    fin.className = "shop-fin";
+    const mark = document.createElement("div");
+    mark.className = "ad-mark";
+    mark.append(icon("check", 34));
+    const t = document.createElement("h3");
+    t.textContent = "הכול בעגלה";
+    const p = document.createElement("p");
+    p.textContent = "כל הכבוד, סיימתם את הקניות.";
+    const done = document.createElement("button");
+    done.type = "button";
+    done.className = "btn";
+    done.textContent = "סיום";
+    done.addEventListener("click", () => { shopDlg.close(); confetti(); });
+    fin.append(mark, t, p, done);
+    body.replaceChildren(fin);
+  } else {
+    body.replaceChildren(head, ...sec.todo.map(shopRow), ...sec.done.map(shopRow));
+  }
+  if (focusedKey >= 0) body.querySelectorAll(".shop-row")[focusedKey]?.focus({ preventScroll: true });
+
+  $("shop-prev").disabled = shop.idx === 0 || !remaining;
+  $("shop-next").disabled = shop.idx === secs.length - 1 || !remaining;
+  document.querySelector(".shop-nav").hidden = !remaining;
+
+  if (shop.dir && !reduceMotionQ.matches) {
+    body.animate([{ opacity: 0, transform: `translateX(${shop.dir * -28}px)` }, { opacity: 1, transform: "none" }],
+      { duration: 260, easing: "cubic-bezier(.19, 1, .22, 1)" });
+  }
+  shop.dir = 0;
+
+  // Finished this section by checking the last item: move on to the next one that still has something to grab.
+  const prevLeft = shop.left.get(sec.cat.id);
+  shop.left.set(sec.cat.id, sec.todo.length);
+  clearTimeout(shop.timer);
+  if (prevLeft > 0 && sec.todo.length === 0 && remaining) {
+    shop.timer = setTimeout(() => {
+      const now = shopSections();
+      const next = now.findIndex((s, i) => i > shop.idx && s.todo.length) ;
+      const target = next >= 0 ? next : now.findIndex((s) => s.todo.length);
+      if (target >= 0 && shopDlg.open) { shop.dir = Math.sign(target - shop.idx) || 1; shop.idx = target; renderShop(); }
+    }, 750);
+  }
+}
+
+async function keepAwake() {
+  try { shop.wake = await navigator.wakeLock?.request("screen"); } catch {}
+}
+
+$("shop-btn").addEventListener("click", () => {
+  const secs = shopSections();
+  shop.idx = Math.max(0, secs.findIndex((s) => s.todo.length));
+  shop.left = new Map(secs.map((s) => [s.cat.id, s.todo.length]));
+  shop.dir = 0;
+  renderShop();
+  shopDlg.showModal();
+  keepAwake();
+});
+$("shop-close").addEventListener("click", () => shopDlg.close());
+$("shop-prev").addEventListener("click", () => { shop.dir = -1; shop.idx--; renderShop(); });
+$("shop-next").addEventListener("click", () => { shop.dir = 1; shop.idx++; renderShop(); });
+shopDlg.addEventListener("close", () => { clearTimeout(shop.timer); shop.wake?.release?.().catch(() => {}); shop.wake = null; });
+document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible" && shopDlg.open) keepAwake(); });
+
 onSnapshot(
   query(itemsRef, orderBy("createdAt")),
   (snap) => {
+    const known = new Set(items.map((i) => i.id));
+    const firstLoad = !loaded;
     items = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+    loaded = true;
+    // Someone else added something while this screen is open: say so.
+    if (!firstLoad) {
+      const fresh = items.filter((i) => !known.has(i.id) && i.addedBy && i.addedBy !== me);
+      if (fresh.length) toast(fresh.length === 1 ? `${fresh[0].addedBy} הוסיף/ה ${fresh[0].name}` : `${fresh[0].addedBy} הוסיף/ה ${fresh.length} מוצרים`);
+    }
     render();
   },
   (err) => {

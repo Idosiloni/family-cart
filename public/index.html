@@ -40,7 +40,10 @@
         <p class="remain"><span id="big-todo" class="rm-n">0</span><span id="summary" class="caption"></span></p>
         <p id="meta" class="sum-meta"></p>
       </div>
-      <button id="order-btn" type="button" class="btn alt compact" data-icon-label="route">סדר הסופר</button>
+      <div class="sum-actions">
+        <button id="shop-btn" type="button" class="btn compact" data-icon-label="cart">יוצאים לקניות</button>
+        <button id="order-btn" type="button" class="btn alt compact" data-icon-label="route">סדר הסופר</button>
+      </div>
     </div>
   </section>
 
@@ -95,6 +98,22 @@
       <button type="submit" class="sq accent" aria-label="הוסף מוצר" data-icon="plus" data-size="22"></button>
     </div>
   </form>
+
+  <dialog id="shop-dialog" class="shop" aria-labelledby="shop-title">
+    <div class="shop-in">
+      <header class="shop-bar">
+        <button id="shop-close" type="button" class="round" aria-label="סגור" data-icon="close"></button>
+        <h2 id="shop-title">מצב קניות</h2>
+        <span id="shop-pos" class="shop-pos"></span>
+      </header>
+      <div id="shop-dots" class="shop-dots"></div>
+      <section id="shop-body" class="shop-body" aria-live="polite"></section>
+      <footer class="shop-nav">
+        <button id="shop-prev" type="button" class="btn alt">הקודם</button>
+        <button id="shop-next" type="button" class="btn">הבא</button>
+      </footer>
+    </div>
+  </dialog>
 
   <dialog id="picker">
     <h2 id="picker-title"></h2>
