@@ -3,7 +3,8 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#F1F1EE">
+  <meta name="theme-color" content="#0B0F1A">
+  <script>try{var m=localStorage.getItem("mode");if(m)document.documentElement.dataset.mode=m}catch(e){}</script>
   <title>העגלה המשפחתית</title>
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="mobile-web-app-capable" content="yes">
@@ -13,36 +14,42 @@
   <link rel="icon" type="image/png" href="icon-192.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Rubik:wght@400;500;700;800;900&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Frank+Ruhl+Libre:wght@400;500;700&family=Heebo:wght@400;500;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <header class="top">
-    <div class="top-row">
-      <span class="brand">העגלה המשפחתית</span>
+  <div id="boot" aria-hidden="true"><span class="boot-l">טוען…</span><div class="boot-mark" data-icon="cart" data-size="34"></div><span id="boot-n" class="boot-r">0%</span></div>
+  <header class="hud">
+    <div class="hud-in">
+      <span class="brand"><i data-icon="cart" data-size="18"></i>העגלה המשפחתית</span>
+      <div class="xp mono" aria-hidden="true"><span class="lab">XP</span><div class="bar"><b id="mini-fill"></b></div><span id="mini-num" class="xpn">0%</span></div>
+      <button id="mode" type="button" class="switch show" role="switch" aria-checked="true" aria-label="מצב כהה">
+        <svg class="moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 14.5A8 8 0 0 1 9.500 4 8 8 0 1 0 20 14.500Z"/></svg>
+        <svg class="sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M4.900 4.900l1.400 1.400M17.700 17.700l1.400 1.400M4.900 19.100l1.400-1.400M17.700 6.300l1.400-1.400"/></svg>
+      </button>
       <div class="top-actions">
         <button id="theme-btn" type="button" class="round" aria-label="בחירת צבע" data-icon="palette"></button>
-        <button id="share" type="button" class="round dark" aria-label="חיבור מכשירים ושיתוף" data-icon="share"></button>
+        <button id="share" type="button" class="round lime" aria-label="חיבור מכשירים ושיתוף" data-icon="share"></button>
       </div>
     </div>
-
-    <p id="greeting" class="greet" role="button" tabindex="0" title="שינוי שם">שלום</p>
-
-    <div class="bignum" dir="ltr" aria-hidden="true">
-      <span id="big-total" class="bn-total">/0</span>
-      <span id="big-done" class="bn-done">0</span>
-    </div>
-    <p id="summary" class="caption"></p>
-    <div id="segs" class="segs" aria-hidden="true"></div>
-
-    <button id="order-btn" type="button" class="pill-btn" data-icon-label="route">סדר הסופר</button>
   </header>
 
-  <div id="mini" class="mini" aria-hidden="true">
-    <b id="mini-num" class="mini-num">0/0</b>
-    <span id="mini-sum" class="mini-sum"></span>
-    <div class="mini-bar"><i id="mini-fill"></i></div>
-  </div>
+  <section class="top">
+    <div class="card3d"><div class="idc" id="idc">
+      <div class="idc-top mono"><span class="tagp">שחקן 1</span><b id="lvl">משימה פעילה</b></div>
+      <p id="greeting" class="greet" role="button" tabindex="0" title="שינוי שם">שלום</p>
+      <div class="bignum" dir="ltr" aria-hidden="true">
+        <span id="big-done" class="bn-done">0</span><span id="big-total" class="bn-total">/0</span>
+      </div>
+      <p id="summary" class="caption"></p>
+      <div class="xpbig" aria-hidden="true"><b id="hero-fill"></b></div>
+      <div id="stats" class="stats" aria-hidden="true"></div>
+      <button id="order-btn" type="button" class="btn alt" data-icon-label="route">סדר הסופר</button>
+    </div></div>
+    <div class="corners" aria-hidden="true"><span id="corner-n">0 ITEMS</span><span>SCROLL ↓</span></div>
+  </section>
+
+  <div class="ticker" id="ticker" aria-hidden="true" hidden><div class="t" id="tick"></div></div>
 
   <main>
     <p id="status" role="status"></p>
@@ -62,7 +69,7 @@
 
     <div id="all-done" class="all-done" hidden>
       <div class="ad-mark" data-icon="check" data-size="34"></div>
-      <h2>הכול בעגלה</h2>
+      <h2><em>הכול</em> בעגלה</h2>
       <p>כל הכבוד. אפשר לנקות ולהתחיל רשימה חדשה.</p>
       <button type="button" id="all-done-clear">נקה והתחל מחדש</button>
     </div>
@@ -72,7 +79,7 @@
         <i class="s1"></i><i class="s2"></i><i class="s3"></i><i class="s4"></i>
         <div class="empty-cart" data-icon="cart" data-size="52"></div>
       </div>
-      <h2>העגלה מחכה למוצר הראשון</h2>
+      <h2>העגלה מחכה <em>למוצר הראשון</em></h2>
       <p>כתבו למטה מה חסר בבית.<br>כולם במשפחה יראו את זה מיד.</p>
     </div>
 

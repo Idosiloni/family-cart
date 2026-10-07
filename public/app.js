@@ -47,7 +47,7 @@ const cartId = getCartId();
   const manifest = {
     name: "העגלה המשפחתית", short_name: "העגלה", lang: "he", dir: "rtl",
     id: "/", scope: location.origin + "/", start_url: location.origin + location.pathname + location.hash,
-    display: "standalone", background_color: "#f7f3ea", theme_color: "#e8563f",
+    display: "standalone", background_color: "#0B0F1A", theme_color: "#0B0F1A",
     icons: [
       { src: location.origin + "/icon-192.png", sizes: "192x192", type: "image/png", purpose: "any maskable" },
       { src: location.origin + "/icon-512.png", sizes: "512x512", type: "image/png", purpose: "any maskable" },
@@ -153,9 +153,11 @@ function render() {
     .map((id) => ({ cat: categoryById(id), items: todo.filter((i) => catOf(i).id === id) }))
     .filter((g) => g.items.length);
 
-  $("list").replaceChildren(...groups.map((g) => {
+  $("list").replaceChildren(...groups.map((g, gi) => {
     const section = document.createElement("section");
     section.className = "group";
+    section.style.setProperty("--cc", g.cat.bg);
+    section.style.setProperty("--cf", g.cat.fg);
     const h = document.createElement("button");
     h.type = "button";
     h.className = "group-head";
@@ -170,7 +172,10 @@ function render() {
     const chev = document.createElement("span");
     chev.className = "chev";
     chev.append(icon("chevron", 20));
-    h.append(tile, gname, count, chev);
+    const folio = document.createElement("span");
+    folio.className = "folio";
+    folio.textContent = String(gi + 1).padStart(2, "0");
+    h.append(tile, folio, gname, count, chev);
     const isCollapsed = collapsed.has(g.cat.id);
     section.classList.toggle("collapsed", isCollapsed);
     h.setAttribute("aria-expanded", String(!isCollapsed));
@@ -195,29 +200,79 @@ function render() {
   $("skeleton").hidden = true;
   $("empty").hidden = items.length > 0;
   $("all-done").hidden = !(items.length > 0 && todo.length === 0);
-  updateHero(todo.length, done.length);
+  updateHero(todo.length, done.length, todo);
   renderSuggestions();
 }
 
-function updateHero(todoN, doneN) {
-  const total = todoN + doneN;
-  $("big-done").textContent = doneN;
-  $("big-total").textContent = "/" + total;
-  $("summary").textContent = !total ? "הרשימה ריקה, בואו נתחיל" :
-    todoN ? `מוצרים בעגלה. עוד ${todoN} לקחת.` : "הכול בעגלה, כל הכבוד";
-
-  // one segment per product (capped so a long list stays readable)
-  const n = Math.min(total, 40);
-  const onN = total ? Math.round((doneN / total) * n) : 0;
-  $("segs").replaceChildren(...Array.from({ length: n }, (_, i) => {
-    const seg = document.createElement("i");
-    seg.className = "seg" + (i < onN ? " on" : "");
-    return seg;
+function renderStats() {
+  const rows = order.map((id) => {
+    const all = items.filter((i) => catOf(i).id === id);
+    return { c: categoryById(id), n: all.length, d: all.filter((i) => i.checked).length };
+  }).filter((r) => r.n);
+  $("stats").replaceChildren(...rows.map((r) => {
+    const row = document.createElement("div");
+    row.className = "st";
+    const lab = document.createElement("span");
+    lab.textContent = r.c.name;
+    const bar = document.createElement("div");
+    bar.className = "bar";
+    const fill = document.createElement("b");
+    fill.style.width = (r.d / r.n) * 100 + "%";
+    fill.style.setProperty("--c", r.c.bg);
+    bar.append(fill);
+    const cnt = document.createElement("span");
+    cnt.className = "cnt";
+    cnt.textContent = `${r.d}/${r.n}`;
+    row.append(lab, bar, cnt);
+    return row;
   }));
+}
 
-  $("mini-num").textContent = total ? `${doneN}/${total}` : "0";
-  $("mini-sum").textContent = total ? (todoN ? `עוד ${todoN} לקחת` : "הכול בעגלה") : "העגלה ריקה";
-  $("mini-fill").style.width = total ? `${(doneN / total) * 100}%` : "0";
+// Scrolling band of what is still left to grab. Two identical halves so the loop is seamless.
+function renderTicker(todo) {
+  const box = $("ticker");
+  box.hidden = todo.length === 0;
+  if (!todo.length) return;
+  const unit = todo.map((i) => i.name);
+  const half = [];
+  while (half.length < 12) half.push(...unit);
+  const spans = [...half, ...half].map((n) => { const s = document.createElement("span"); s.textContent = n; return s; });
+  $("tick").replaceChildren(...spans);
+  $("tick").style.animationDuration = Math.max(24, half.length * 2.6) + "s";
+}
+
+// Counter feel: tween the big numeral to its new value.
+function countTo(el, to) {
+  const from = Number(el.textContent) || 0;
+  if (from === to || matchMedia("(prefers-reduced-motion: reduce)").matches) { el.textContent = to; return; }
+  const t0 = performance.now(), dur = 450;
+  (function f(t) {
+    const k = Math.min(1, (t - t0) / dur);
+    el.textContent = Math.round(from + (to - from) * (1 - Math.pow(1 - k, 3)));
+    if (k < 1) requestAnimationFrame(f);
+  })(t0);
+}
+
+function setSummary(todoN, total) {
+  const em = (t) => { const e = document.createElement("em"); e.textContent = t; return e; };
+  const parts = !total ? ["הרשימה ריקה, ", em("בואו נתחיל")] :
+    todoN ? ["מוצרים בעגלה. עוד ", em(`${todoN} לקחת`), "."] : [em("הכול בעגלה"), ", כל הכבוד"];
+  $("summary").replaceChildren(...parts);
+}
+
+function updateHero(todoN, doneN, todo) {
+  const total = todoN + doneN;
+  const pct = total ? Math.round((doneN / total) * 100) : 0;
+  countTo($("big-done"), doneN);
+  $("big-total").textContent = "/" + total;
+  setSummary(todoN, total);
+  $("lvl").textContent = !total ? "מוכנים?" : todoN ? "משימה פעילה" : "שלב הושלם";
+  $("hero-fill").style.width = pct + "%";
+  $("mini-fill").style.width = pct + "%";
+  $("mini-num").textContent = pct + "%";
+  $("corner-n").textContent = `${total} ITEMS · ${pct}%`;
+  renderStats();
+  renderTicker(todo);
 
   // Celebrate the moment the last item gets checked off (not on first load).
   if (prevTodo !== null && prevTodo > 0 && todoN === 0 && total > 0) confetti();
@@ -237,7 +292,7 @@ renderGreeting();
 // Flat shapes in the palette (no emoji).
 function confetti() {
   const box = $("confetti");
-  const colors = ["#2A3DE0", "#F5E663", "#FF7A45", "#FF9FA8", "#DCD3FF", "#BFE3FF"];
+  const colors = ["#5CF2C0", "#4CC9F0", "#A58BFF", "#FF6B8A", "#FFC46B", "#FFFFFF"];
   for (let i = 0; i < 40; i++) {
     const p = document.createElement("i");
     p.className = "piece";
@@ -573,12 +628,11 @@ $("clear-done").addEventListener("click", async () => {
 
 // ---- Themes (shared through prefs; localStorage avoids a flash of the default) ----
 const THEMES = [
-  { id: "cobalt", name: "קובלט", color: "#2A3DE0" },
-  { id: "tomato", name: "עגבנייה", color: "#E5482D" },
-  { id: "violet", name: "סגול", color: "#6B4DE6" },
-  { id: "pink", name: "ורוד", color: "#D6307A" },
-  { id: "amber", name: "ענבר", color: "#C76A00" },
-  { id: "ink", name: "שחור", color: "#0D0D0D" },
+  { id: "mint", name: "מנטה", color: "#5CF2C0" },
+  { id: "violet", name: "סגול", color: "#A58BFF" },
+  { id: "coral", name: "אלמוג", color: "#FF6B8A" },
+  { id: "sky", name: "תכלת", color: "#4CC9F0" },
+  { id: "amber", name: "ענבר", color: "#FFC46B" },
 ];
 function applyTheme(id) {
   const t = THEMES.find((x) => x.id === id) || THEMES[0];
@@ -649,6 +703,41 @@ const dismissHint = () => { $("hint").hidden = true; try { localStorage.setItem(
 $("hint-x").addEventListener("click", dismissHint);
 $("hint-go").addEventListener("click", () => { dismissHint(); openConnect(); });
 
-// ---- Compact bar that appears once the big header scrolls away ----
-new IntersectionObserver(([e]) => document.body.classList.toggle("scrolled", !e.isIntersecting), { threshold: 0 })
-  .observe(document.querySelector(".top"));
+// ---- Player card tilt + shine (pointer devices only) ----
+const idc = $("idc");
+if (matchMedia("(hover:hover) and (prefers-reduced-motion:no-preference)").matches) {
+  const wrap = idc.parentElement;
+  wrap.addEventListener("mousemove", (e) => {
+    const r = idc.getBoundingClientRect(), x = (e.clientX - r.left) / r.width - 0.5, y = (e.clientY - r.top) / r.height - 0.5;
+    idc.style.transform = `rotateY(${x * 10}deg) rotateX(${-y * 10}deg)`;
+    idc.style.setProperty("--gx", x * 160 + "%");
+  });
+  wrap.addEventListener("mouseleave", () => { idc.style.transform = ""; idc.style.setProperty("--gx", "-120%"); });
+}
+
+// ---- Light / dark switch (stored per device; system setting is the default) ----
+const modeBtn = $("mode");
+const isDark = () => (document.documentElement.dataset.mode || (matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark")) === "dark";
+const syncMode = () => modeBtn.setAttribute("aria-checked", String(isDark()));
+syncMode();
+modeBtn.addEventListener("click", () => {
+  const next = isDark() ? "light" : "dark";
+  document.documentElement.dataset.mode = next;
+  try { localStorage.setItem("mode", next); } catch {}
+  syncMode();
+});
+
+// ---- Intro loader: a short 0-100% count, once per session ----
+(function boot() {
+  const el = $("boot");
+  let seen = false;
+  try { seen = sessionStorage.getItem("booted") === "1"; sessionStorage.setItem("booted", "1"); } catch {}
+  if (seen || matchMedia("(prefers-reduced-motion: reduce)").matches) { el.remove(); return; }
+  const t0 = performance.now(), dur = 1100;
+  (function f(t) {
+    const k = Math.min(1, (t - t0) / dur);
+    $("boot-n").textContent = Math.round((1 - Math.pow(1 - k, 3)) * 100) + "%";
+    if (k < 1) requestAnimationFrame(f);
+    else { el.classList.add("out"); setTimeout(() => el.remove(), 700); }
+  })(t0);
+})();
