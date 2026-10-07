@@ -91,6 +91,7 @@ const catOf = (item) => categoryById(item.category || classify(item.name));
 function renderItem(item) {
   const li = document.createElement("li");
   li.className = item.checked ? "done" : "";
+  li.dataset.id = item.id;
 
   const box = document.createElement("input");
   box.type = "checkbox";
@@ -144,7 +145,34 @@ function renderItem(item) {
   return li;
 }
 
+// FLIP: remember where every row was, rebuild, then slide each row from its old spot to the new one.
+const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)");
+function snapshotRows() {
+  const rects = new Map();
+  document.querySelectorAll("li[data-id]").forEach((li) => rects.set(li.dataset.id, li.getBoundingClientRect()));
+  return rects;
+}
+function playFlip(first) {
+  if (!first.size || reduceMotion.matches) return;
+  document.querySelectorAll("li[data-id]").forEach((li) => {
+    const a = first.get(li.dataset.id), b = li.getBoundingClientRect();
+    if (!a || !b.width) return; // brand-new rows keep their pop-in
+    li.style.animation = "none"; // rebuilt rows that already existed must not replay the CSS pop-in
+    const dx = a.left - b.left, dy = a.top - b.top;
+    if (!dx && !dy) return;
+    // Groups clip their rows (overflow: hidden) and paint below the done list; lift them while a row travels.
+    const group = li.closest(".group");
+    group?.classList.add("flip");
+    li.animate([{ transform: `translate(${dx}px, ${dy}px)` }, { transform: "none" }],
+      { duration: 350, easing: "cubic-bezier(.19, 1, .22, 1)" })
+      .finished.then(() => group?.classList.remove("flip"), () => {});
+  });
+}
+
 function render() {
+  const first = snapshotRows();
+  // Rows are rebuilt on every render; keep a keyboard user's place on the checkbox they just toggled.
+  const focusedBox = document.activeElement?.matches?.("li input[type=checkbox]") ? document.activeElement.id : null;
   const todo = items.filter((i) => !i.checked);
   const done = items.filter((i) => i.checked);
 
@@ -156,6 +184,7 @@ function render() {
   $("list").replaceChildren(...groups.map((g, gi) => {
     const section = document.createElement("section");
     section.className = "group";
+    if (first.size) section.style.animation = "none"; // the rise-in is for the first paint, not every re-render
     section.style.setProperty("--cc", g.cat.bg);
     section.style.setProperty("--cf", g.cat.fg);
     const h = document.createElement("button");
@@ -202,6 +231,8 @@ function render() {
   $("all-done").hidden = !(items.length > 0 && todo.length === 0);
   updateHero(todo.length, done.length, todo);
   renderSuggestions();
+  if (focusedBox) document.getElementById(focusedBox)?.focus({ preventScroll: true });
+  playFlip(first);
 }
 
 function renderStats() {
@@ -226,19 +257,6 @@ function renderStats() {
     row.append(lab, bar, cnt);
     return row;
   }));
-}
-
-// Scrolling band of what is still left to grab. Two identical halves so the loop is seamless.
-function renderTicker(todo) {
-  const box = $("ticker");
-  box.hidden = todo.length === 0;
-  if (!todo.length) return;
-  const unit = todo.map((i) => i.name);
-  const half = [];
-  while (half.length < 12) half.push(...unit);
-  const spans = [...half, ...half].map((n) => { const s = document.createElement("span"); s.textContent = n; return s; });
-  $("tick").replaceChildren(...spans);
-  $("tick").style.animationDuration = Math.max(24, half.length * 2.6) + "s";
 }
 
 // Counter feel: tween the big numeral to its new value.
@@ -266,13 +284,7 @@ function updateHero(todoN, doneN, todo) {
   countTo($("big-done"), doneN);
   $("big-total").textContent = "/" + total;
   setSummary(todoN, total);
-  $("lvl").textContent = !total ? "מוכנים?" : todoN ? "משימה פעילה" : "שלב הושלם";
-  $("hero-fill").style.width = pct + "%";
-  $("mini-fill").style.width = pct + "%";
-  $("mini-num").textContent = pct + "%";
-  $("corner-n").textContent = `${total} ITEMS · ${pct}%`;
   renderStats();
-  renderTicker(todo);
 
   // Celebrate the moment the last item gets checked off (not on first load).
   if (prevTodo !== null && prevTodo > 0 && todoN === 0 && total > 0) confetti();
