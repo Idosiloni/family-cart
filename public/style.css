@@ -1,7 +1,7 @@
 /* =========================================================
    Family Cart - "Midnight Aurora"
    Dark glass, soft glow, thin borders, mint + violet light.
-   Features: player card, folios, counter.
+   Features: summary row, folios, counter.
    ========================================================= */
 :root {
   --bg: #0A0E19; --bg2: #121a2e; --text: #E9EEFF; --mut: #8E99B8;
@@ -67,29 +67,15 @@ svg { display: block; flex: none; }
 .round.lime { background: linear-gradient(135deg, var(--accent), var(--accent2)); color: var(--on-accent); border-color: transparent; }
 .round:active { transform: scale(.9); }
 
-/* ---------- Player card ---------- */
-.top { max-width: 640px; margin: 0 auto; padding: 22px 16px 0; }
-.card3d { perspective: 900px; }
-.idc {
-  position: relative; overflow: hidden; border-radius: 28px; padding: 20px 20px 22px; transform-style: preserve-3d; transition: transform .15s var(--ease);
-  background: linear-gradient(160deg, var(--glass2), var(--glass)); border: 1px solid var(--line); box-shadow: var(--shadow), inset 0 1px 0 rgba(255, 255, 255, .12);
-  -webkit-backdrop-filter: var(--blur); backdrop-filter: var(--blur);
-}
-.idc::before { content: ""; position: absolute; width: 260px; height: 260px; border-radius: 50%; inset-inline-start: -90px; top: -120px; background: radial-gradient(circle, color-mix(in srgb, var(--accent) 38%, transparent), transparent 70%); pointer-events: none; }
-.idc::after { content: ""; position: absolute; inset: 0; pointer-events: none; transform: translateX(var(--gx, -120%)); transition: transform .45s var(--ease); background: linear-gradient(115deg, transparent 35%, rgba(255, 255, 255, .14) 48%, transparent 62%); }
-.idc > * { position: relative; }
-.greet { margin: 8px 0 0; font-size: 17px; font-weight: 500; color: var(--mut); cursor: pointer; width: fit-content; }
-.bignum { display: flex; align-items: baseline; justify-content: flex-end; gap: 6px; margin-top: 0; font-family: var(--sans); }
-.bn-done { font-size: 108px; font-weight: 700; line-height: 1; letter-spacing: -.04em; background: linear-gradient(180deg, var(--text) 30%, color-mix(in srgb, var(--accent) 80%, var(--text))); -webkit-background-clip: text; background-clip: text; color: transparent; }
-.bn-total { font-size: 34px; font-weight: 500; color: var(--mut); }
-.caption { margin: 4px 0 0; font-size: 20px; font-weight: 700; min-height: 1.4em; }
-.stats { display: grid; gap: 9px; margin-top: 18px; }
-.st { display: grid; grid-template-columns: 100px 1fr 34px; gap: 12px; align-items: center; font-size: 12px; }
-.st > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; font-size: 13px; color: var(--text); }
-.st .bar { height: 6px; border-radius: 99px; background: var(--glass2); overflow: hidden; }
-.st .bar b { display: block; height: 100%; width: 0; border-radius: 99px; background: var(--c, var(--accent)); box-shadow: 0 0 10px var(--c, var(--accent)); transition: width 1s var(--ease); }
-.st .cnt { direction: ltr; text-align: end; color: var(--mut); }
-.idc .btn { margin-top: 18px; width: 100%; }
+/* ---------- Summary ---------- */
+.top { max-width: 640px; margin: 0 auto; padding: 18px 16px 0; }
+.sum-row { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; }
+.greet { margin: 0; font-size: 15px; font-weight: 500; color: var(--mut); cursor: pointer; width: fit-content; }
+.remain { display: flex; align-items: baseline; gap: 10px; margin: 2px 0 0; }
+.rm-n { font-size: 56px; font-weight: 700; line-height: 1; letter-spacing: -.03em; color: var(--accent); }
+.caption { font-size: 22px; font-weight: 700; }
+.sum-meta { margin: 4px 0 0; font-size: 14px; color: var(--mut); min-height: 1.4em; }
+.btn.compact { flex: none; min-height: 44px; padding: 8px 18px; font-size: 15px; }
 
 /* ---------- Buttons ---------- */
 .btn, .primary {
@@ -252,7 +238,6 @@ dialog h2 { margin: 0 0 6px; font-size: 26px; font-weight: 800; color: var(--tex
 @media (max-width: 600px) {
   .hud-in { gap: 10px; padding: 0 14px; }
   .brand { font-size: 15px; }
-  .bn-done { font-size: 96px; }
   dialog { width: 100%; max-width: none; margin: auto 0 0; border-radius: 30px 30px 0 0; border-bottom: 0; padding: 32px 20px calc(env(safe-area-inset-bottom) + 18px); }
   dialog::before { content: ""; position: absolute; top: 10px; left: 50%; width: 44px; height: 5px; margin-left: -22px; border-radius: 9px; background: var(--line); }
   dialog[open] { animation: sheet .35s cubic-bezier(.2, .9, .3, 1); }
@@ -281,14 +266,9 @@ dialog h2 { margin: 0 0 6px; font-size: 26px; font-weight: 800; color: var(--tex
 
 /* serif accent words: sans headline + serif emphasis (Hebrew has no italic, so contrast comes from the serif) */
 em, .ser { font-style: normal; font-family: "Frank Ruhl Libre", Georgia, serif; font-weight: 500; color: var(--accent); }
-.caption em { font-size: 1.12em; }
 .empty h2 em, .all-done h2 em { font-size: 1.1em; }
 .all-done h2 em { color: #fff; text-decoration: underline; text-decoration-thickness: 2px; text-underline-offset: 6px; text-decoration-color: rgba(255, 255, 255, .5); }
 
-/* glow cast under the player card */
-.card3d { position: relative; isolation: isolate; }
-.card3d::before { content: ""; position: absolute; z-index: -1; inset: auto 8% -26px; height: 70px; border-radius: 50%; background: linear-gradient(90deg, var(--accent), var(--accent2)); filter: blur(38px); opacity: .5; transition: opacity .4s; }
-.card3d:hover::before { opacity: .75; }
 
 /* light/dark switch */
 .switch { position: relative; flex: none; width: 52px; height: 30px; padding: 0; border-radius: 99px; border: 1px solid var(--line); background: var(--glass); cursor: pointer; transition: background .3s var(--ease); }

@@ -235,30 +235,6 @@ function render() {
   playFlip(first);
 }
 
-function renderStats() {
-  const rows = order.map((id) => {
-    const all = items.filter((i) => catOf(i).id === id);
-    return { c: categoryById(id), n: all.length, d: all.filter((i) => i.checked).length };
-  }).filter((r) => r.n);
-  $("stats").replaceChildren(...rows.map((r) => {
-    const row = document.createElement("div");
-    row.className = "st";
-    const lab = document.createElement("span");
-    lab.textContent = r.c.name;
-    const bar = document.createElement("div");
-    bar.className = "bar";
-    const fill = document.createElement("b");
-    fill.style.width = (r.d / r.n) * 100 + "%";
-    fill.style.setProperty("--c", r.c.bg);
-    bar.append(fill);
-    const cnt = document.createElement("span");
-    cnt.className = "cnt";
-    cnt.textContent = `${r.d}/${r.n}`;
-    row.append(lab, bar, cnt);
-    return row;
-  }));
-}
-
 // Counter feel: tween the big numeral to its new value.
 function countTo(el, to) {
   const from = Number(el.textContent) || 0;
@@ -271,20 +247,18 @@ function countTo(el, to) {
   })(t0);
 }
 
-function setSummary(todoN, total) {
-  const em = (t) => { const e = document.createElement("em"); e.textContent = t; return e; };
-  const parts = !total ? ["הרשימה ריקה, ", em("בואו נתחיל")] :
-    todoN ? ["מוצרים בעגלה. עוד ", em(`${todoN} לקחת`), "."] : [em("הכול בעגלה"), ", כל הכבוד"];
-  $("summary").replaceChildren(...parts);
+function setSummary(todoN, doneN) {
+  const total = todoN + doneN;
+  $("summary").textContent = !total ? "הרשימה ריקה" : todoN ? "נשארו לקחת" : "הכול בעגלה, כל הכבוד";
+  $("meta").textContent = total ? `${doneN} מתוך ${total} כבר בעגלה` : "";
+  $("big-todo").hidden = !todoN;
 }
 
 function updateHero(todoN, doneN, todo) {
   const total = todoN + doneN;
   const pct = total ? Math.round((doneN / total) * 100) : 0;
-  countTo($("big-done"), doneN);
-  $("big-total").textContent = "/" + total;
-  setSummary(todoN, total);
-  renderStats();
+  countTo($("big-todo"), todoN);
+  setSummary(todoN, doneN);
 
   // Celebrate the moment the last item gets checked off (not on first load).
   if (prevTodo !== null && prevTodo > 0 && todoN === 0 && total > 0) confetti();
@@ -714,18 +688,6 @@ $("hint").hidden = hintSeen;
 const dismissHint = () => { $("hint").hidden = true; try { localStorage.setItem("hintSeen", "1"); } catch {} };
 $("hint-x").addEventListener("click", dismissHint);
 $("hint-go").addEventListener("click", () => { dismissHint(); openConnect(); });
-
-// ---- Player card tilt + shine (pointer devices only) ----
-const idc = $("idc");
-if (matchMedia("(hover:hover) and (prefers-reduced-motion:no-preference)").matches) {
-  const wrap = idc.parentElement;
-  wrap.addEventListener("mousemove", (e) => {
-    const r = idc.getBoundingClientRect(), x = (e.clientX - r.left) / r.width - 0.5, y = (e.clientY - r.top) / r.height - 0.5;
-    idc.style.transform = `rotateY(${x * 10}deg) rotateX(${-y * 10}deg)`;
-    idc.style.setProperty("--gx", x * 160 + "%");
-  });
-  wrap.addEventListener("mouseleave", () => { idc.style.transform = ""; idc.style.setProperty("--gx", "-120%"); });
-}
 
 // ---- Light / dark switch (stored per device; system setting is the default) ----
 const modeBtn = $("mode");
