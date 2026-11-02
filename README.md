@@ -1,5 +1,7 @@
 # Family Cart · העגלה המשפחתית
 
+[![CI](https://github.com/Idosiloni/family-cart/actions/workflows/ci.yml/badge.svg)](https://github.com/Idosiloni/family-cart/actions/workflows/ci.yml) ![License: MIT](https://img.shields.io/badge/license-MIT-green) ![No build step](https://img.shields.io/badge/build-none-blue)
+
 **A shared family shopping list that sorts itself into supermarket aisles and syncs live between phones.** Hebrew-first, right-to-left, installable on a home screen, and built with no framework and no build step.
 
 **Live app: https://family-cart-cf2cf.web.app** · **Try it without signing up: https://family-cart-cf2cf.web.app/#demo** (an in-memory cart, nothing is saved)
@@ -23,7 +25,7 @@ Family WhatsApp groups are where shopping lists go to die: items get buried, bou
 - **Share the list.** Send what's left, grouped by section, to WhatsApp or the system share sheet.
 - **Connect devices.** A QR code and a WhatsApp link to join the same cart from another phone.
 - **Installable.** "Add to home screen" opens the exact cart, via a manifest generated at runtime.
-- **Polish.** Dark and light mode, five colour themes shared per cart, FLIP animations when items move, `prefers-reduced-motion` respected, 44px touch targets, keyboard focus kept after check-off.
+- **Polish.** Dark and light mode, five colour themes shared per cart, FLIP animations when rows move, dialogs and bottom sheets that animate out as well as in, a staggered first paint, `prefers-reduced-motion` respected, 44px touch targets, keyboard focus kept after check-off.
 
 | Light mode | Mobile | Shopping mode | Live update |
 |---|---|---|---|
@@ -57,7 +59,13 @@ To run against your own backend:
 2. Put your web-app config in `public/firebase-config.js` and your project id in `.firebaserc`.
 3. Deploy: `npx firebase-tools deploy` (publishes `public/` and `firestore.rules`).
 
-Regenerate the README screenshots (headless Chrome, Node 22+, uses demo mode):
+Run the tests (Node 22+, no dependencies to install):
+
+```bash
+npm test
+```
+
+Regenerate the README screenshots (headless Chrome, uses demo mode):
 
 ```bash
 node scripts/screenshots.mjs docs
@@ -83,7 +91,12 @@ public/
   categories.js    supermarket sections and the classifier
   catalog*.js      product and brand dictionaries (Israeli market)
   parse.js         item, quantity and spoken-list parsing
+  format.js        pure text helpers: greeting, share text, timer
+  effects.js       count-up, confetti, toast
+  swipe.js         swipe-to-check / swipe-to-delete gesture
   icons.js         SVG icon set
+test/              node:test unit tests (classifier, parser, text helpers, demo store)
+.github/workflows  CI: runs the tests on every push and pull request
 firestore.rules    validation and access rules
 scripts/           README screenshot generator
 ```
@@ -91,7 +104,7 @@ scripts/           README screenshot generator
 ## Roadmap
 
 - Price estimate and store comparison (Israeli chains publish price files)
-- Split `app.js` into modules and add unit tests for the classifier and parser
+- Keep splitting `app.js` (shopping mode and the settings dialogs are next) and test the Firestore rules with the emulator
 - Offline support with a service worker
 - English interface (the classifier is Hebrew-specific, so this needs its own catalog)
 

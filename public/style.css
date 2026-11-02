@@ -266,7 +266,7 @@ dialog h2 { margin: 0 0 6px; font-size: 26px; font-weight: 800; color: var(--tex
    Round 2 from Preymaker + Visuvate
    ========================================================= */
 /* intro loader: tiny corner labels, centered mark */
-#boot { position: fixed; inset: 0; z-index: 100; display: grid; place-items: center; background: var(--bg); transition: opacity .6s var(--ease), visibility .6s; }
+#boot { position: fixed; inset: 0; z-index: 100; display: grid; place-items: center; background: var(--bg); transition: opacity .4s var(--ease), visibility .4s; }
 #boot.out { opacity: 0; visibility: hidden; }
 .boot-mark { display: grid; place-items: center; width: 72px; height: 72px; border-radius: 22px; color: var(--on-accent); background: linear-gradient(135deg, var(--accent), var(--accent2)); box-shadow: 0 0 60px -6px color-mix(in srgb, var(--accent) 60%, transparent); animation: float 2.4s ease-in-out infinite; }
 .boot-l, .boot-r { position: absolute; top: 50%; margin-top: -6px; font-size: 10px; font-weight: 600; letter-spacing: .14em; text-transform: uppercase; color: var(--mut); }
@@ -343,4 +343,27 @@ li.armed { box-shadow: inset 0 0 0 2px currentColor; }
   .btn.compact { white-space: nowrap; padding: 8px 12px; }
   .sum-row { padding: 22px; border-radius: 28px; background: var(--glass); border: 1px solid var(--line); -webkit-backdrop-filter: var(--blur); backdrop-filter: var(--blur); }
   .add-bar { width: 640px; margin: 0; inset-inline-start: calc(50vw - 508px); inset-inline-end: auto; }
+}
+
+/* ---------- Dialogs: animate out as well as in ----------
+   Where supported (Chrome 117+, Safari 17.4+, Firefox 129+), a closing dialog fades and slides away
+   instead of vanishing. Elsewhere the entrance animations above still apply. */
+@supports (transition-behavior: allow-discrete) {
+  dialog {
+    animation: none; opacity: 0; transform: translateY(10px) scale(.97);
+    transition: opacity .2s ease, transform .3s var(--ease), overlay .3s allow-discrete, display .3s allow-discrete;
+  }
+  dialog[open] { animation: none; opacity: 1; transform: none; }
+  @starting-style { dialog[open] { opacity: 0; transform: translateY(10px) scale(.97); } }
+  dialog::backdrop { opacity: 0; transition: opacity .25s ease, overlay .25s allow-discrete, display .25s allow-discrete; }
+  dialog[open]::backdrop { opacity: 1; }
+  @starting-style { dialog[open]::backdrop { opacity: 0; } }
+  @media (max-width: 600px) {
+    dialog { transform: translateY(100%); }
+    dialog[open] { transform: none; }
+    @starting-style { dialog[open] { transform: translateY(100%); } }
+  }
+  dialog.shop { transform: scale(.98); }
+  dialog.shop[open] { transform: none; }
+  @starting-style { dialog.shop[open] { transform: scale(.98); } }
 }

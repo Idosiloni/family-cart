@@ -1,0 +1,11 @@
+{
+  "name": "family-cart",
+  "private": true,
+  "type": "module",
+  "description": "Shared family shopping list (static site + Firestore)",
+  "scripts": {
+    "test": "node --test \"test/*.test.js\"",
+    "start": "cd public && python3 -m http.server 8000"
+  },
+  "engines": { "node": ">=22" }
+}

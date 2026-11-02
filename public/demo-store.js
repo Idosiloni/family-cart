@@ -102,8 +102,10 @@ const now = Date.now();
 });
 
 // A "family member" adds something a while after load, so the live-sync toast can be seen.
-setTimeout(() => {
-  addDoc(collection(null, "carts", "demo", "items"), {
-    name: "בננות", checked: false, createdAt: Date.now(), category: classify("בננות"), addedBy: "סבתא",
-  });
-}, 14000);
+if (typeof document !== "undefined") {
+  setTimeout(() => {
+    addDoc(collection(null, "carts", "demo", "items"), {
+      name: "בננות", checked: false, createdAt: Date.now(), category: classify("בננות"), addedBy: "סבתא",
+    });
+  }, 14000);
+}

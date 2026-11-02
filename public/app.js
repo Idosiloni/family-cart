@@ -6,6 +6,9 @@ import { firebaseConfig } from "./firebase-config.js";
 import { CATEGORIES, DEFAULT_ORDER, categoryById, classify, normalizeOrder, setLearned, rememberLocally, learnKey } from "./categories.js";
 import { parseItems, splitQty, splitSpoken } from "./parse.js";
 import { icon } from "./icons.js";
+import { greeting, clock, shareText } from "./format.js";
+import { countTo, confetti, toast, reducedMotion } from "./effects.js";
+import { attachSwipe } from "./swipe.js";
 
 const $ = (id) => document.getElementById(id);
 const statusEl = $("status");
@@ -87,38 +90,6 @@ document.querySelectorAll("[data-icon-label]").forEach((el) => el.prepend(icon(e
 const catOf = (item) => categoryById(item.category || classify(item.name));
 
 // ---- Render ----
-// Swipe a row right to check it off, left to delete it (with undo).
-function attachSwipe(li, item) {
-  let x0 = null, y0 = 0, dx = 0, live = false;
-  const reset = () => { x0 = null; live = false; li.classList.remove("swiping", "sw-check", "sw-del", "armed"); li.style.transform = ""; };
-  li.addEventListener("pointerdown", (e) => {
-    if (e.target.closest("button, input")) return;
-    x0 = e.clientX; y0 = e.clientY; dx = 0; live = false;
-  });
-  li.addEventListener("pointermove", (e) => {
-    if (x0 === null) return;
-    const mx = e.clientX - x0, my = e.clientY - y0;
-    if (!live) {
-      if (Math.abs(mx) > 10 && Math.abs(mx) > Math.abs(my) * 1.5) { live = true; li.setPointerCapture(e.pointerId); li.classList.add("swiping"); }
-      else { if (Math.abs(my) > 10) x0 = null; return; }
-    }
-    dx = mx;
-    li.style.transform = `translateX(${dx}px)`;
-    li.classList.toggle("sw-check", dx > 0);
-    li.classList.toggle("sw-del", dx < 0);
-    li.classList.toggle("armed", Math.abs(dx) > 90);
-  });
-  li.addEventListener("pointerup", () => {
-    if (x0 === null) return;
-    const fire = live && Math.abs(dx) > 90, right = dx > 0;
-    if (live) { const stop = (e) => { e.preventDefault(); e.stopPropagation(); }; li.addEventListener("click", stop, { capture: true, once: true }); setTimeout(() => li.removeEventListener("click", stop, true), 50); }
-    reset();
-    if (!fire) return;
-    if (right) toggleItem(item, !item.checked); else deleteWithUndo([item], `${item.name} נמחק`);
-  });
-  li.addEventListener("pointercancel", reset);
-}
-
 function renderItem(item) {
   const li = document.createElement("li");
   li.className = item.checked ? "done" : "";
@@ -170,19 +141,18 @@ function renderItem(item) {
   del.addEventListener("click", () => deleteWithUndo([item], `${item.name} נמחק`));
 
   li.append(box, label, edit, del);
-  attachSwipe(li, item);
+  attachSwipe(li, { onRight: () => toggleItem(item, !item.checked), onLeft: () => deleteWithUndo([item], `${item.name} נמחק`) });
   return li;
 }
 
 // FLIP: remember where every row was, rebuild, then slide each row from its old spot to the new one.
-const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)");
 function snapshotRows() {
   const rects = new Map();
   document.querySelectorAll("li[data-id]").forEach((li) => rects.set(li.dataset.id, li.getBoundingClientRect()));
   return rects;
 }
 function playFlip(first) {
-  if (!first.size || reduceMotion.matches) return;
+  if (!first.size || reducedMotion()) return;
   document.querySelectorAll("li[data-id]").forEach((li) => {
     const a = first.get(li.dataset.id), b = li.getBoundingClientRect();
     if (!a || !b.width) return; // brand-new rows keep their pop-in
@@ -214,6 +184,7 @@ function render() {
     const section = document.createElement("section");
     section.className = "group";
     if (first.size) section.style.animation = "none"; // the rise-in is for the first paint, not every re-render
+    else section.style.animationDelay = Math.min(gi, 6) * 50 + "ms"; // cascade the sections in
     section.style.setProperty("--cc", g.cat.bg);
     section.style.setProperty("--cf", g.cat.fg);
     const h = document.createElement("button");
@@ -265,18 +236,6 @@ function render() {
   if (shopDlg.open) renderShop();
 }
 
-// Counter feel: tween the big numeral to its new value.
-function countTo(el, to) {
-  const from = Number(el.textContent) || 0;
-  if (from === to || matchMedia("(prefers-reduced-motion: reduce)").matches) { el.textContent = to; return; }
-  const t0 = performance.now(), dur = 450;
-  (function f(t) {
-    const k = Math.min(1, (t - t0) / dur);
-    el.textContent = Math.round(from + (to - from) * (1 - Math.pow(1 - k, 3)));
-    if (k < 1) requestAnimationFrame(f);
-  })(t0);
-}
-
 function setSummary(todoN, doneN) {
   const total = todoN + doneN;
   $("summary").textContent = !total ? "הרשימה ריקה" : todoN ? "נשארו לקחת" : "הכול בעגלה, כל הכבוד";
@@ -296,59 +255,12 @@ function updateHero(todoN, doneN, todo) {
 }
 let prevTodo = null;
 
-function greeting() {
-  const h = new Date().getHours();
-  return h < 5 ? "לילה טוב" : h < 12 ? "בוקר טוב" : h < 17 ? "צהריים טובים" : h < 21 ? "ערב טוב" : "לילה טוב";
-}
 function renderGreeting() {
   $("greeting").textContent = greeting() + (me ? ", " + me : "");
 }
 renderGreeting();
 
-// Flat shapes in the palette (no emoji).
-function confetti() {
-  const box = $("confetti");
-  const colors = ["#5CF2C0", "#4CC9F0", "#A58BFF", "#FF6B8A", "#FFC46B", "#FFFFFF"];
-  for (let i = 0; i < 40; i++) {
-    const p = document.createElement("i");
-    p.className = "piece";
-    const size = 8 + Math.random() * 10;
-    p.style.width = size + "px";
-    p.style.height = (i % 3 === 0 ? size * 2.2 : size) + "px";
-    p.style.borderRadius = i % 2 ? "50%" : "3px";
-    p.style.background = colors[i % colors.length];
-    p.style.left = Math.random() * 100 + "%";
-    p.style.setProperty("--dx", (Math.random() * 160 - 80) + "px");
-    p.style.setProperty("--rot", (Math.random() * 900 - 450) + "deg");
-    p.style.setProperty("--dur", (2 + Math.random() * 1.6) + "s");
-    p.style.animationDelay = Math.random() * 0.5 + "s";
-    box.append(p);
-    setTimeout(() => p.remove(), 4500);
-  }
-}
-
 let loaded = false;
-function toast(text, action) {
-  document.querySelectorAll(".toast").forEach((t) => t.remove());
-  const el = document.createElement("div");
-  el.className = "toast";
-  el.setAttribute("role", "status");
-  const span = document.createElement("span");
-  span.textContent = text;
-  el.append(span);
-  const gone = () => el.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 200 }).finished.then(() => el.remove(), () => el.remove());
-  if (action) {
-    const b = document.createElement("button");
-    b.type = "button";
-    b.textContent = action.label;
-    b.addEventListener("click", () => { clearTimeout(timer); action.run(); gone(); });
-    el.append(b);
-  }
-  (shopDlg.open ? shopDlg : document.body).append(el);
-  el.animate([{ opacity: 0, transform: "translate(-50%, 12px)" }, { opacity: 1, transform: "translate(-50%, 0)" }], { duration: 220, easing: "cubic-bezier(.19, 1, .22, 1)" });
-  const timer = setTimeout(gone, action ? 6000 : 3200);
-}
-
 // Delete now, offer to bring it back. Rules only allow creating unchecked items, so checked ones are re-checked afterwards.
 async function restoreItems(list) {
   const batch = writeBatch(db);
@@ -372,7 +284,6 @@ function deleteWithUndo(list, label) {
 // ---- Shopping mode: one section at a time, in store-walking order ----
 const shopDlg = $("shop-dialog");
 const shop = { idx: 0, left: new Map(), timer: 0, wake: null, dir: 0, start: 0, startDone: 0, tick: 0, summary: null, prev: null };
-const reduceMotionQ = matchMedia("(prefers-reduced-motion: reduce)");
 
 function shopSections() {
   return order.map((id) => {
@@ -512,7 +423,7 @@ function renderShop() {
   $("shop-next").disabled = shop.idx === secs.length - 1 || !remaining;
   document.querySelector(".shop-nav").hidden = !remaining;
 
-  if (shop.dir && !reduceMotionQ.matches) {
+  if (shop.dir && !reducedMotion()) {
     body.animate([{ opacity: 0, transform: `translateX(${shop.dir * -28}px)` }, { opacity: 1, transform: "none" }],
       { duration: 260, easing: "cubic-bezier(.19, 1, .22, 1)" });
   }
@@ -548,21 +459,14 @@ $("shop-btn").addEventListener("click", () => {
   shopDlg.showModal();
   keepAwake();
   const time = $("shop-time");
-  const draw = () => { const s = Math.floor((Date.now() - shop.start) / 1000); time.textContent = `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`; };
+  const draw = () => { time.textContent = clock((Date.now() - shop.start) / 1000); };
   draw();
   clearInterval(shop.tick);
   shop.tick = setInterval(draw, 1000);
 });
 $("send-btn").addEventListener("click", async () => {
-  const secs = shopSections().filter((s) => s.todo.length);
-  const left = secs.reduce((n, s) => n + s.todo.length, 0);
-  if (!left) { toast("הכול כבר בעגלה, אין מה לשלוח"); return; }
-  const lines = [`העגלה המשפחתית, נשארו ${left}:`];
-  secs.forEach((s) => {
-    lines.push("", `*${s.cat.name}*`);
-    s.todo.forEach((i) => lines.push(`• ${i.name}${i.qty > 1 ? " ×" + i.qty : ""}${i.note ? ` (${i.note})` : ""}`));
-  });
-  const text = lines.join("\n");
+  const text = shareText(shopSections());
+  if (!text) { toast("הכול כבר בעגלה, אין מה לשלוח"); return; }
   if (navigator.share) { try { await navigator.share({ text }); } catch {} return; }
   window.open("https://wa.me/?text=" + encodeURIComponent(text), "_blank", "noopener");
 });
@@ -983,11 +887,11 @@ modeBtn.addEventListener("click", () => {
   let seen = false;
   try { seen = sessionStorage.getItem("booted") === "1"; sessionStorage.setItem("booted", "1"); } catch {}
   if (seen || matchMedia("(prefers-reduced-motion: reduce)").matches) { el.remove(); return; }
-  const t0 = performance.now(), dur = 1100;
+  const t0 = performance.now(), dur = 550; // a list opened from a WhatsApp link in the aisle should not wait on a loader
   (function f(t) {
     const k = Math.min(1, (t - t0) / dur);
     $("boot-n").textContent = Math.round((1 - Math.pow(1 - k, 3)) * 100) + "%";
     if (k < 1) requestAnimationFrame(f);
-    else { el.classList.add("out"); setTimeout(() => el.remove(), 700); }
+    else { el.classList.add("out"); setTimeout(() => el.remove(), 450); }
   })(t0);
 })();
