@@ -1,8 +1,7 @@
-import { initializeApp } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js";
 import {
-  getFirestore, collection, doc, addDoc, updateDoc, deleteDoc, setDoc,
+  DEMO, db, collection, doc, addDoc, updateDoc, deleteDoc, setDoc,
   onSnapshot, query, orderBy, writeBatch, increment, deleteField,
-} from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
+} from "./db.js";
 import { firebaseConfig } from "./firebase-config.js";
 import { CATEGORIES, DEFAULT_ORDER, categoryById, classify, normalizeOrder, setLearned, rememberLocally, learnKey } from "./categories.js";
 import { parseItems, splitQty, splitSpoken } from "./parse.js";
@@ -23,6 +22,7 @@ function newCartId() {
 }
 
 function getCartId() {
+  if (DEMO) return "demo"; // never touch the saved cart id or the URL
   let id = location.hash.slice(1);
   if (!/^[a-f0-9]{32}$/.test(id)) {
     let saved = null;
@@ -58,7 +58,6 @@ const cartId = getCartId();
   link.href = URL.createObjectURL(new Blob([JSON.stringify(manifest)], { type: "application/manifest+json" }));
   document.head.append(link);
 })();
-const db = getFirestore(initializeApp(firebaseConfig));
 const itemsRef = collection(db, "carts", cartId, "items");
 const prefsRef = doc(db, "carts", cartId, "settings", "prefs");
 const learnedRef = doc(db, "carts", cartId, "settings", "learned");
@@ -485,7 +484,7 @@ function renderShop() {
       if (n > 0) {
         const min = Math.max(1, Math.round((Date.now() - shop.start) / 60000));
         shop.summary = { n, min };
-        try {
+        if (!DEMO) try {
           const trips = JSON.parse(localStorage.getItem("trips") || "[]");
           shop.prev = trips[0] || null;
           trips.unshift({ t: Date.now(), n, min });
@@ -879,7 +878,7 @@ $("name-skip").addEventListener("click", () => {
   nameDialog.close();
 });
 try {
-  if (!me && localStorage.getItem("meSkipped") !== "1") setTimeout(askName, 900);
+  if (!DEMO && !me && localStorage.getItem("meSkipped") !== "1") setTimeout(askName, 900);
 } catch {}
 
 $("all-done-clear").addEventListener("click", () => $("clear-done").click());
@@ -960,7 +959,8 @@ $("copy-link").addEventListener("click", async () => {
 // One-time hint: the link is what joins devices together.
 let hintSeen = false;
 try { hintSeen = localStorage.getItem("hintSeen") === "1"; } catch {}
-$("hint").hidden = hintSeen;
+$("hint").hidden = hintSeen || DEMO;
+if (DEMO) $("demo-bar").hidden = false;
 const dismissHint = () => { $("hint").hidden = true; try { localStorage.setItem("hintSeen", "1"); } catch {} };
 $("hint-x").addEventListener("click", dismissHint);
 $("hint-go").addEventListener("click", () => { dismissHint(); openConnect(); });
