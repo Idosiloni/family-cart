@@ -21,11 +21,12 @@ export function initPrices(ctx) {
   fetch("prices.json").then((r) => r.json()).then((d) => { data = d; refresh(); }).catch(() => { data = null; });
 
   // ---- Which chains are compared: the ones with published prices, plus any the family added ----
-  const fileChains = () => (data?.chains || []).map((c) => ({ id: c.id, name: c.name, branch: c.branch, custom: false }));
+  const fileChains = () => (data?.chains || []).map((c) => ({ id: c.id, name: c.name, branch: c.branch, custom: false, optional: !!c.optional }));
   const allChains = () => [...fileChains(), ...ctx.storeCfg.custom.map((c) => ({ id: c.id, name: c.n, custom: true }))];
   const selected = () => {
     const sel = ctx.storeCfg.sel;
-    return allChains().filter((c) => (sel ? sel.includes(c.id) : !c.custom));
+    // Default: the chains with published prices, except "optional" ones (their branch file has no fresh produce).
+    return allChains().filter((c) => (sel ? sel.includes(c.id) : !c.custom && !c.optional));
   };
   const chainName = (id) => allChains().find((c) => c.id === id)?.name || storeById(id)?.name || (id === "other" ? "אחר" : id);
 
@@ -55,7 +56,7 @@ export function initPrices(ctx) {
     const entries = Object.entries(unitPrices(name).out).filter(([id]) => sel.has(id));
     if (!entries.length) return "";
     const [id, v] = entries.sort((a, b) => a[1] - b[1])[0];
-    return `${money(v)} ב${chainName(id)}`;
+    return `${money(v)}${unitPrices(name).product?.kg ? " לק״ג" : ""} ב${chainName(id)}`;
   }
 
   // ---- The one-line estimate on the list tab ----
@@ -114,6 +115,7 @@ export function initPrices(ctx) {
     pick.type = "button";
     pick.addEventListener("click", openStores);
     p.append(pick);
+    if (r.estimatedCount) p.append(h("p", "fine", `כולל ${r.estimatedCount} פירות וירקות שנמכרים לפי משקל: חושבו לפי משקל משוער, כך שהסכום הוא הערכה.`));
     p.append(h("p", "fine", `מחירי מדף מסניף אחד בכל רשת, ללא מבצעים והנחות מועדון` + (data.asOf ? `, נכון ל-${new Date(data.asOf).toLocaleDateString("he-IL")}` : "") + ". המחיר בקופה יכול להיות שונה."));
     return p;
   }
@@ -239,7 +241,9 @@ export function initPrices(ctx) {
     const { product, mine } = unitPrices(name);
     priced = { name, key: priceKey(name), mine };
     $("price-title").textContent = name;
-    $("price-sub").textContent = product
+    $("price-sub").textContent = product?.kg
+      ? `זוהה כ"${product.name}". מחיר לקילו, מה שתזינו יחליף את מחיר הרשת. בהערכה, כל יחידה ברשימה נחשבת ${product.unitKg} ק״ג.`
+      : product
       ? `זוהה כ"${product.name}${product.size ? " " + product.size : ""}". מחיר ליחידה אחת, מה שתזינו יחליף את מחיר הרשת.`
       : "המוצר לא נמצא במאגר המחירים. הזינו מחיר ליחידה אחת בכל רשת שתרצו.";
     const fields = selected().map((c) => {
@@ -298,6 +302,7 @@ export function initPrices(ctx) {
       });
       const name = h("span", "", c.name);
       if (c.branch) name.append(" ", h("small", "", c.branch));
+      if (c.optional) name.append(" ", h("small", "", "· בלי מחירי ירקות"));
       row.append(box, name);
       if (c.custom) {
         const rm = h("button", "link-btn danger", "הסרה");

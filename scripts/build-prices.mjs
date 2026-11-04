@@ -17,6 +17,7 @@ import { gunzipSync } from "node:zlib";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { PRODUCTS } from "./reference-products.mjs";
+import { PRODUCE } from "./reference-produce.mjs";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const UA = { "user-agent": "Mozilla/5.0 (family-cart price builder; personal use)" };
@@ -39,6 +40,7 @@ const CHAINS = [
     id: "hazihinam", name: "חצי חינם", format: "סניף פיזי",
     chainId: "7290700100008", subChain: "000", storeId: "206", branch: "חצי חינם הוד השרון",
     source: "https://shop.hazi-hinam.co.il/Prices",
+    optional: true, // this branch's file has no fresh produce, so it is not compared by default (the family can switch it on)
   },
   // No fetcher on purpose: the files are behind a login, so this chain only loads from --osherad <file>.
   {
@@ -226,6 +228,18 @@ export function pickPrices(product, loaded) {
   return { ...best, equivUsed };
 }
 
+// Fresh produce: per chain, the weighted item whose name matches `re` (shortest name, then cheapest), price per kg.
+// loaded: [{ id, items: Map(code -> { name, price, weighted }) }]  ->  { prices, names } | null (needs >= 2 chains)
+export function pickProduce(product, loaded) {
+  const prices = {}, names = {};
+  for (const l of loaded) {
+    const hits = [...l.items.values()].filter((it) => it.weighted && product.re.test(it.name) && it.price >= 1 && it.price <= 100);
+    hits.sort((a, b) => a.name.length - b.name.length || a.price - b.price);
+    if (hits[0]) { prices[l.id] = Math.round(hits[0].price * 100) / 100; names[l.id] = hits[0].name; }
+  }
+  return Object.keys(prices).length >= 2 ? { prices, names } : null;
+}
+
 async function main() {
   const cacheDir = opt("cache");
   const loaded = [];
@@ -251,10 +265,18 @@ async function main() {
     products.push({ id: p.id, name: p.name, size: p.size, aliases: p.aliases, ...(p.not ? { not: p.not } : {}), ...(p.nums ? { nums: p.nums } : {}), barcode: best.code, prices: best.prices });
   }
 
+  for (const p of PRODUCE) {
+    const best = pickProduce(p, loaded);
+    if (!best) { console.warn(`  skip produce ${p.id} (${p.name}): fewer than 2 chains list it`); continue; }
+    const v = Object.values(best.prices);
+    if (Math.max(...v) / Math.min(...v) > 2.5) console.warn(`  ? produce ${p.id}: prices differ a lot`, best.prices, best.names);
+    products.push({ id: p.id, name: p.name, size: "לק״ג", aliases: p.aliases, ...(p.not ? { not: p.not } : {}), ...(p.nums?.length ? { nums: p.nums } : {}), kg: true, unitKg: p.unitKg, prices: best.prices });
+  }
+
   const out = {
     asOf: loaded.map((l) => l.date).sort()[0],
     note: "מחירי מדף מקבצי המחירים הציבוריים שהרשתות מפרסמות לפי חוק (סניף אחד לכל רשת). ללא הנחות מועדון ומבצעים.",
-    chains: loaded.map((l) => ({ id: l.id, name: l.name, branch: l.branch, format: l.format, date: l.date, source: l.source })),
+    chains: loaded.map((l) => ({ id: l.id, name: l.name, branch: l.branch, format: l.format, date: l.date, source: l.source, ...(l.optional ? { optional: true } : {}) })),
     products,
   };
   const body = JSON.stringify({ ...out, products: undefined }).slice(0, -1) + ',"products":[\n' +
