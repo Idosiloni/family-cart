@@ -20,7 +20,7 @@ Family WhatsApp groups are where shopping lists go to die: items get buried, bou
 - **Live sync.** Everyone with the cart link sees changes instantly. When someone else adds an item while your screen is open, a toast says who added what.
 - **Auto-sorting into supermarket sections.** A word-aware Hebrew classifier (with a catalog of Israeli products and brands) files each item under produce, dairy, bakery, and so on. Correct it once and the family's correction is remembered for every future item.
 - **Our products.** Everything the family ever adds is counted and kept. Tap `+` to add it again, pin the weekly regulars and add them all in one tap, change a product's section, or remove it. While typing, matching regulars appear above the keyboard.
-- **Prices and store comparison.** Real shelf prices for ~100 common products from the chains' public price files (see below), the estimated cost of your list at each chain, and the family's own prices on top. Plus **receipts**: type what you actually paid at a store and see the average per trip and per item.
+- **Prices and store comparison.** Real shelf prices for ~170 common products from the chains' public price files (see below), the estimated cost of your list at each chain, and the family's own prices on top. Plus **receipts**: type what you actually paid at a store and see the average per trip and per item.
 - **Your store's order.** Move sections up or down to match how you walk your supermarket; the whole family sees the same order.
 - **Shopping mode.** One section at a time, in walking order, with a progress strip, a trip timer, a screen that stays awake, and a summary at the end that compares with your last trip.
 - **Fast input.** Type several items at once, paste a whole WhatsApp-style list, or dictate by voice. Quantities (`חלב x3`) and notes are parsed out.
@@ -38,7 +38,7 @@ Family WhatsApp groups are where shopping lists go to die: items get buried, bou
 
 ## Where the prices come from
 
-Israeli law makes the big chains publish a price file per branch. `scripts/build-prices.mjs` downloads the public ones, takes a curated list of ~100 branded, fixed-size products (`scripts/reference-products.mjs`, matched by barcode), and writes the small `public/prices.json` the app loads.
+Israeli law makes the big chains publish a price file per branch. `scripts/build-prices.mjs` downloads the public ones, takes a curated list of ~170 branded, fixed-size products (`scripts/reference-products.mjs`, matched by barcode), and writes the small `public/prices.json` the app loads.
 
 - **Chains with data today:** Shufersal Deal (Ra'anana), Carrefour Hyper (Ra'anana), Hazi Hinam (Hod HaSharon) and Osher Ad (Kfar Saba). The branch and the date are shown in the app. These are **shelf prices of one branch, without club discounts or promotions**, so the register can differ.
 - **Osher Ad is loaded from a file a person downloaded**, not fetched by the script, because its files sit behind a login and the builder never logs in anywhere. Download the branch's `PriceFull` file yourself (for example with the open-source [israeli-supermarket-scarpers](https://github.com/OpenIsraeliSupermarkets/israeli-supermarket-scarpers)) and pass it with `--osherad <file>`.

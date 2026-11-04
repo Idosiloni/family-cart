@@ -2,6 +2,8 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { matchProduct, compareStores, estimateTotal, receiptStats, priceKey } from "../public/pricing.js";
+import { pickPrices } from "../scripts/build-prices.mjs";
+import { PRODUCTS as REFERENCE } from "../scripts/reference-products.mjs";
 
 const data = JSON.parse(readFileSync(new URL("../public/prices.json", import.meta.url), "utf8"));
 const real = data.products;
@@ -74,8 +76,9 @@ test("matching: everyday names find the right product, lookalikes find none", ()
   assert.equal(idOf("חלב 3%"), "milk3");
   assert.equal(idOf("חלב תנובה"), "milk3");
   assert.equal(idOf("חלב 1%"), "milk1");
-  assert.equal(idOf("חלב שקדים"), null);
-  assert.equal(idOf("חלב סויה"), null);
+  assert.equal(idOf("חלב שקדים"), "almond-milk"); // it has a product of its own now; it must never resolve to ordinary milk
+  assert.notEqual(idOf("חלב שקדים"), "milk3");
+  assert.equal(idOf("חלב סויה"), "soy-milk");
   assert.equal(idOf("חלב קוקוס"), null);
   assert.equal(idOf("חלב 2%"), null); // a different milk: no guess
   assert.equal(idOf("שוקו"), "milk-choc");
@@ -154,4 +157,92 @@ test("priceKey keeps numbers apart, so milk 1% and milk 3% never share a price",
   });
   assert.equal(r.comparableCount, 1);
   assert.deepEqual(r.unpriced, ["חלב 1%"]);
+});
+
+// ---------- equiv: per-chain equivalent barcodes (scripts/build-prices.mjs) ----------
+const chainItems = (id, entries) => ({ id, items: new Map(Object.entries(entries).map(([code, price]) => [code, { price, weighted: false }])) });
+
+test("pickPrices: the barcode priced at the most chains wins, and every chain that has it is priced from it", () => {
+  const loaded = [chainItems("a", { m: 10, s: 9 }), chainItems("b", { m: 11, s: 9.5 }), chainItems("c", { s: 8 })];
+  const r = pickPrices({ codes: ["m", "s"] }, loaded);
+  assert.equal(r.code, "s");
+  assert.deepEqual(r.prices, { a: 9, b: 9.5, c: 8 });
+  assert.deepEqual(r.equivUsed, []);
+});
+
+test("pickPrices: a chain without the winning barcode falls back to its own equiv barcode, and says so", () => {
+  const loaded = [chainItems("a", { m: 10 }), chainItems("b", { m: 11 }), chainItems("o", { alt: 9.9, other: 1 })];
+  const r = pickPrices({ codes: ["m"], equiv: { o: ["missing", "alt"] } }, loaded);
+  assert.deepEqual(r.prices, { a: 10, b: 11, o: 9.9 });
+  assert.deepEqual(r.equivUsed, [{ chain: "o", code: "alt", price: 9.9 }]);
+  assert.equal(r.n, 3);
+});
+
+test("pickPrices: equiv never overrides a chain that carries the main barcode, and never rescues a product nobody else prices", () => {
+  const loaded = [chainItems("a", { m: 10, alt: 1 }), chainItems("b", { m: 11 })];
+  assert.deepEqual(pickPrices({ codes: ["m"], equiv: { a: ["alt"] } }, loaded).prices, { a: 10, b: 11 });
+  assert.equal(pickPrices({ codes: ["m"], equiv: { b: ["alt"] } }, [chainItems("a", { m: 10 }), chainItems("b", { alt: 5 })]), null);
+});
+
+test("pickPrices: weighted items are skipped", () => {
+  const w = (id, price) => ({ id, items: new Map([["m", { price, weighted: true }]]) });
+  assert.equal(pickPrices({ codes: ["m"] }, [w("a", 5), w("b", 6)]), null);
+});
+
+test("the reference list: every equiv is for a chain that exists, and names a barcode that is not already a main code", () => {
+  const chainIds = new Set(data.chains.map((c) => c.id));
+  const codes = new Set(REFERENCE.flatMap((p) => p.codes));
+  let used = 0;
+  for (const p of REFERENCE) {
+    for (const [chain, list] of Object.entries(p.equiv || {})) {
+      used++;
+      assert.ok(chainIds.has(chain), `${p.id}: unknown chain ${chain}`);
+      for (const code of list) assert.ok(!codes.has(code), `${p.id}: equiv ${code} is also a main code (a sibling pack belongs in codes)`);
+    }
+  }
+  assert.ok(used >= 2);
+});
+
+// ---------- the widened list ----------
+test("matching on the widened list: new products are found by what a family types, ambiguous or lookalike names find none", () => {
+  const cases = {
+    "חלב שקדים": "almond-milk", "משקה סויה": "soy-milk", "פילדלפיה": "philadelphia", "קוטג 9%": "cottage9",
+    "גבינה בולגרית": "bulgarian", "חלומי": "halloumi", "ביצי חופש": "eggs-free", "פסטה פנה": "penne", "פוזילי": "fusilli",
+    "אורז יסמין": "rice-jasmine", "רוטב סויה": "soy-sauce", "חומץ": "vinegar", "אבקת אפייה": "baking-powder", "שמרים": "yeast",
+    "דוריטוס": "doritos", "תפוצ'יפס": "tapuchips", "פסק זמן": "pesek-zman", "שוקולד מריר": "choc-dark", "מגנום": "magnum",
+    "נאגטס": "nuggets", "בורקס גבינה": "burekas-cheese", "פריגת": "prigat", "נביעות": "neviot", "שוופס": "schweppes",
+    "אקונומיקה": "bleach", "נוזל רצפה": "floor-cleaner", "ניקוי חלונות": "window-cleaner", "חיתולים מידה 5": "diapers5",
+    "מטרנה שלב 2": "formula2", "פיתות כוסמין": "spelt-pita", "לחם אנגל": "angel-bread",
+  };
+  for (const [typed, id] of Object.entries(cases)) assert.equal(idOf(typed), id, typed);
+  // the everyday generic names still mean the same product as before
+  assert.equal(idOf("חלב"), "milk3");
+  assert.equal(idOf("אורז"), "rice-persian");
+  assert.equal(idOf("קוטג'"), "cottage5");
+  assert.equal(idOf("בורקס"), "burekas");
+  assert.equal(idOf("פסטה"), "pasta");
+  assert.equal(idOf("חמאה"), "butter");
+  // lookalikes and variants with no product of their own match nothing
+  for (const typed of ["חלב שקדים וניל", "גלידה", "גלידה וניל", "קולה 1.5", "פנה מלא", "חיתולים מידה 7", "מטרנה שלב 4"]) {
+    assert.equal(idOf(typed), null, typed);
+  }
+});
+
+test("every alias of every product finds its own product, so nothing on the list is unreachable or ambiguous", () => {
+  for (const p of real) for (const a of p.aliases) assert.equal(matchProduct(a, real)?.id ?? null, p.id, `${p.id} alias "${a}"`);
+});
+
+test("prices.json: every product has a barcode, at least two chain prices, a sane spread, and ids are unique", () => {
+  const ids = new Set();
+  for (const p of real) {
+    assert.ok(!ids.has(p.id), `duplicate id ${p.id}`);
+    ids.add(p.id);
+    assert.ok(/^\d{6,14}$/.test(p.barcode), `${p.id} barcode`);
+    const v = Object.values(p.prices);
+    assert.ok(v.length >= 2, `${p.id} is priced at ${v.length} chain(s)`);
+    assert.ok(Math.max(...v) / Math.min(...v) <= 2.2, `${p.id} prices differ too much`);
+  }
+  assert.ok(real.length >= 150, `only ${real.length} products`);
+  const atOsher = real.filter((p) => p.prices["osher-ad"]).length;
+  assert.ok(atOsher >= 100, `only ${atOsher} products priced at Osher Ad`);
 });

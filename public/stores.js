@@ -36,8 +36,8 @@ export const STORES = [
   {
     id: "victory", name: "ויקטורי", type: "regular", hasData: false,
     traits: "רשת סופרמרקטים ארצית בגודל בינוני.",
-    website: "https://www.victoryonline.co.il", priceFiles: "none",
-    researchNote: "ויקיפדיה (תקציר חיפוש): 68 סניפים באוגוסט 2023. בסקר ישן מ-2021 (837 ש״ח בסל) דורגה שנייה אחרי רמי לוי. אתר הקבצים laibcatalog.co.il מפרט אותה, אבל לא הצלחתי לקבל ממנו רשימת קבצים בבקשה פשוטה, לכן אין לנו מחירים.",
+    website: "https://www.victoryonline.co.il", priceFiles: "public",
+    researchNote: "ויקיפדיה (תקציר חיפוש): 68 סניפים באוגוסט 2023. בסקר ישן מ-2021 (837 ש״ח בסל) דורגה שנייה אחרי רמי לוי. קבצי המחירים שלה בפרסום פתוח באתר laibcatalog.co.il (בלי התחברות), אבל לא כללנו אותה בהשוואה כי המשפחה לא קונה בה.",
     sources: ["https://he.wikipedia.org/w/index.php?search=ויקטורי+רשת+סופרמרקטים", "https://www.pressreader.com/israel/jerusalem-post/20210624/281659668007290", "https://laibcatalog.co.il/"],
   },
   {
