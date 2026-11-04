@@ -131,13 +131,13 @@ test("receiptStats averages per store and ignores junk", () => {
   assert.deepEqual(receiptStats(undefined), {});
 });
 
-test("every chain in prices.json has a public-files entry in the store directory", async () => {
+test("every chain in prices.json has a data entry in the store directory (public files, or a manually downloaded file)", async () => {
   const { STORES, storeById } = await import("../public/stores.js");
   for (const c of data.chains) {
     const s = storeById(c.id);
     assert.ok(s, `${c.id} is in stores.js`);
     assert.equal(s.hasData, true);
-    assert.equal(s.priceFiles, "public");
+    assert.ok(["public", "manual"].includes(s.priceFiles), `${c.id} priceFiles`);
   }
   assert.equal(new Set(STORES.map((s) => s.id)).size, STORES.length, "unique store ids");
   assert.ok(STORES.every((s) => s.sources.length >= 1 && s.researchNote && s.traits));

@@ -7,6 +7,7 @@
 //   node scripts/build-prices.mjs --fetch                 scrape today's files and rebuild
 //   node scripts/build-prices.mjs --fetch --cache dir     ...and keep the unzipped XML in dir
 //   node scripts/build-prices.mjs --shufersal a.gz --carrefour b.xml --hazi c.gz   offline
+//   node scripts/build-prices.mjs --fetch --osherad PriceFull7290103152017-001-031-....xml   add Osher Ad (Kfar Saba)
 //   node scripts/build-prices.mjs --cache dir --explore "חלב.*3%"   find barcodes (needs files)
 //
 // Zero dependencies, Node >= 22. Shufersal's download links are signed and expire, so the listing
@@ -38,6 +39,12 @@ const CHAINS = [
     id: "hazihinam", name: "חצי חינם", format: "סניף פיזי",
     chainId: "7290700100008", subChain: "000", storeId: "206", branch: "חצי חינם הוד השרון",
     source: "https://shop.hazi-hinam.co.il/Prices",
+  },
+  // No fetcher on purpose: the files are behind a login, so this chain only loads from --osherad <file>.
+  {
+    id: "osher-ad", name: "אושר עד", format: "סניף פיזי",
+    chainId: "7290103152017", subChain: "001", storeId: "031", branch: "אושר עד כפר סבא",
+    source: "https://url.publishedprices.co.il/", manual: true,
   },
 ];
 
@@ -163,21 +170,21 @@ async function fetchHazi(c) {
 }
 
 const FETCHERS = { shufersal: fetchShufersal, carrefour: fetchCarrefour, hazihinam: fetchHazi };
-const ARG_OF = { shufersal: "shufersal", carrefour: "carrefour", hazihinam: "hazi" };
+const ARG_OF = { shufersal: "shufersal", carrefour: "carrefour", hazihinam: "hazi", "osher-ad": "osherad" };
 
 // ---------- main ----------
 async function loadChain(c, cacheDir) {
   const localPath = opt(ARG_OF[c.id]);
   let raw, branch;
   if (localPath) raw = readFileSync(localPath);
-  else if (flag("fetch")) ({ file: raw, branch } = await FETCHERS[c.id](c));
+  else if (flag("fetch") && FETCHERS[c.id]) ({ file: raw, branch } = await FETCHERS[c.id](c));
   else if (cacheDir && existsSync(join(cacheDir, c.id + ".xml"))) raw = readFileSync(join(cacheDir, c.id + ".xml"));
   else return null;
   const { text, gzName } = decodeFile(raw);
   if (cacheDir && !localPath) { mkdirSync(cacheDir, { recursive: true }); writeFileSync(join(cacheDir, c.id + ".xml"), text); }
   const fileStore = text.match(/<StoreID>0*(\d+)<\/StoreID>/)?.[1];
   if (fileStore && +fileStore !== +c.storeId) console.warn(`! ${c.id}: file is for store ${fileStore}, expected ${c.storeId}`);
-  const date = (gzName.match(/-(\d{8})-/) || localPath?.match(/(\d{8})/) || [])[1];
+  const date = (gzName.match(/-(\d{8})-/) || localPath?.match(/-(20\d{6})-/) || [])[1];
   return {
     ...c, branch: branch || c.branch, items: parseItems(text),
     date: date ? `${date.slice(0, 4)}-${date.slice(4, 6)}-${date.slice(6)}` : new Date().toISOString().slice(0, 10),
@@ -191,7 +198,7 @@ async function main() {
     try {
       const l = await loadChain(c, cacheDir);
       if (l) { loaded.push(l); console.log(`${c.id}: ${l.items.size} items, ${l.branch}, ${l.date}`); }
-      else console.warn(`- ${c.id}: no input (use --fetch or --${ARG_OF[c.id]} <file>)`);
+      else console.warn(`- ${c.id}: no input (use ${c.manual ? "" : "--fetch or "}--${ARG_OF[c.id]} <file>)`);
     } catch (e) { console.warn(`! ${c.id} failed: ${e.message}`); }
   }
   if (loaded.length < 2) throw new Error("need at least two chains to build prices.json");
