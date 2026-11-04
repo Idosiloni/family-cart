@@ -43,27 +43,29 @@ const shot = async (name) => {
 // Fresh page in the given mode; waits out the boot splash.
 const load = async (mode) => {
   await cdp('Page.navigate', { url: URL0 }); await sleep(800);
-  await ev(`localStorage.clear(); sessionStorage.clear(); localStorage.setItem('mode', '${mode}'); localStorage.setItem('theme', 'mint'); location.reload()`);
-  await sleep(3200);
+  await ev(`localStorage.clear(); sessionStorage.clear(); localStorage.setItem('mode', '${mode}'); localStorage.setItem('theme', 'mint'); localStorage.setItem('meSkipped', '1'); location.reload()`);
+  await sleep(2200);
 };
 
 await cdp('Page.enable');
 
-await view(1280, 820);
-await load('dark');
-await shot('desktop-dark');
-await load('light');
-await shot('desktop-light');
-
+// Phone-sized shots: the app is a single calm column, so a phone frame shows it best.
 await view(390, 844, true);
+await load('light');
+await shot('list-light');
 await load('dark');
-await shot('mobile');
-await ev(`document.getElementById('shop-btn').click(); 1`); await sleep(1200);
+await shot('list-dark');
+await load('light');
+await ev(`document.getElementById('tab-regulars').click(); 1`); await sleep(600);
+await shot('products');
+await ev(`document.getElementById('tab-prices').click(); 1`); await sleep(1200);
+await shot('prices');
+await ev(`document.getElementById('tab-list').click(); document.getElementById('shop-btn').click(); 1`); await sleep(1200);
 await shot('shop-mode');
 
 // Live sync: the demo "family member" adds an item ~14s after load.
 await ev(`document.getElementById('shop-close').click(); 1`);
-await load('dark');
+await load('light');
 await sleep(12500);
 await shot('live-sync');
 

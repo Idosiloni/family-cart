@@ -3,8 +3,9 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#0B0F1A">
-  <script>try{var m=localStorage.getItem("mode");if(m)document.documentElement.dataset.mode=m}catch(e){}</script>
+  <meta name="theme-color" content="#F7F6F2" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#121513" media="(prefers-color-scheme: dark)">
+  <script>try{var m=localStorage.getItem("mode");if(m)document.documentElement.dataset.mode=m;var t=localStorage.getItem("theme");if(t)document.documentElement.dataset.theme=t}catch(e){}</script>
   <title>העגלה המשפחתית</title>
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="mobile-web-app-capable" content="yes">
@@ -14,103 +15,121 @@
   <link rel="icon" type="image/png" href="icon-192.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Frank+Ruhl+Libre:wght@400;500;700&family=Heebo:wght@400;500;700;800&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <div id="boot" aria-hidden="true"><span class="boot-l">טוען…</span><div class="boot-mark" data-icon="cart" data-size="34"></div><span id="boot-n" class="boot-r">0%</span></div>
-  <header class="hud">
-    <div class="hud-in">
-      <span class="brand"><i data-icon="cart" data-size="18"></i>העגלה המשפחתית</span>
-      <button id="mode" type="button" class="switch show" role="switch" aria-checked="true" aria-label="מצב כהה">
-        <svg class="moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 14.5A8 8 0 0 1 9.500 4 8 8 0 1 0 20 14.500Z"/></svg>
-        <svg class="sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M4.900 4.900l1.400 1.400M17.700 17.700l1.400 1.400M4.900 19.100l1.400-1.400M17.700 6.300l1.400-1.400"/></svg>
-      </button>
-      <div class="top-actions">
-        <button id="theme-btn" type="button" class="round" aria-label="בחירת צבע" data-icon="palette"></button>
-        <button id="share" type="button" class="round lime" aria-label="חיבור מכשירים ושיתוף" data-icon="share"></button>
-      </div>
+  <header class="bar">
+    <div class="bar-in">
+      <h1 class="brand">העגלה המשפחתית</h1>
+      <button id="menu-btn" type="button" class="icon-btn" aria-label="תפריט" data-icon="dots"></button>
     </div>
+    <nav class="tabs" role="tablist" aria-label="חלקי האפליקציה">
+      <button type="button" role="tab" id="tab-list" data-view="list" aria-selected="true">הרשימה</button>
+      <button type="button" role="tab" id="tab-regulars" data-view="regulars" aria-selected="false">המוצרים שלנו</button>
+      <button type="button" role="tab" id="tab-prices" data-view="prices" aria-selected="false">מחירים</button>
+    </nav>
   </header>
-
-  <div class="shell">
-  <section class="top">
-    <div class="sum-row">
-      <div class="sum-text">
-        <p id="greeting" class="greet" role="button" tabindex="0" title="שינוי שם">שלום</p>
-        <p class="remain"><span id="big-todo" class="rm-n">0</span><span id="summary" class="caption"></span></p>
-        <p id="meta" class="sum-meta"></p>
-      </div>
-      <div class="sum-actions">
-        <button id="shop-btn" type="button" class="btn compact" data-icon-label="cart">יוצאים לקניות</button>
-        <button id="send-btn" type="button" class="btn alt compact" data-icon-label="share">שלח רשימה</button>
-        <button id="order-btn" type="button" class="btn alt compact" data-icon-label="route">סדר הסופר</button>
-      </div>
-    </div>
-  </section>
-
 
   <main>
     <p id="status" role="status"></p>
-
-    <p id="demo-bar" class="demo-bar" hidden>
-      <span><b>מצב הדגמה</b> · שום דבר לא נשמר</span>
-      <a href="./">פתחו עגלה משלכם</a>
-    </p>
-
-    <div id="hint" class="hint-banner" hidden>
-      <p>כדי לראות את אותה עגלה גם בטלפון וגם במחשב, צריך לפתוח את <b>אותו קישור</b> בכל מכשיר.</p>
-      <button type="button" class="go" id="hint-go">חבר</button>
-      <button type="button" class="x" id="hint-x" aria-label="סגור" data-icon="close"></button>
+    <p id="demo-bar" class="note-bar" hidden><span>מצב הדגמה, שום דבר לא נשמר.</span> <a href="./">לעגלה שלכם</a></p>
+    <div id="install-banner" class="note-bar" hidden>
+      <span>הוסיפו את העגלה למסך הבית</span>
+      <button type="button" id="install-go" class="link-btn">איך?</button>
+      <button type="button" id="install-x" class="icon-btn small" aria-label="סגור" data-icon="close" data-size="16"></button>
     </div>
 
-    <section id="sugg" hidden>
-      <h2 class="cap">הוספה מהירה</h2>
-      <div id="sugg-row" class="sugg-row"></div>
+    <!-- ===== List ===== -->
+    <section id="view-list" class="view" aria-labelledby="tab-list">
+      <div class="summary">
+        <p class="summary-line"><b id="big-todo">0</b> <span id="summary"></span><span id="meta" class="meta-inline"></span></p>
+        <div class="summary-actions">
+          <button id="shop-btn" type="button" class="btn" data-icon-label="cart">יוצאים לקניות</button>
+          <button id="send-btn" type="button" class="btn ghost icon-only" aria-label="שלחו את הרשימה" data-icon="share"></button>
+        </div>
+      </div>
+      <button id="price-line" type="button" class="price-line" hidden></button>
+
+      <div id="skeleton" class="skeleton" aria-hidden="true"><i></i><i></i><i></i></div>
+
+      <div id="all-done" class="state" hidden>
+        <div class="state-mark" data-icon="check" data-size="28"></div>
+        <h2>הכול בעגלה</h2>
+        <p>כל הכבוד. אפשר לנקות ולהתחיל רשימה חדשה.</p>
+        <button type="button" id="all-done-clear" class="btn ghost">נקו והתחילו מחדש</button>
+      </div>
+
+      <div id="empty" class="state" hidden>
+        <div class="state-mark" data-icon="cart" data-size="28"></div>
+        <h2>הרשימה ריקה</h2>
+        <p>כתבו למטה מה חסר בבית, או בחרו מ"המוצרים שלנו".<br>כולם במשפחה יראו את זה מיד.</p>
+      </div>
+
+      <div id="list"></div>
+
+      <section id="done-section" hidden>
+        <button id="done-toggle" type="button" class="done-head" aria-expanded="false">
+          <span>בעגלה <span id="done-count"></span></span>
+          <span class="chev" data-icon="chevron" data-size="18"></span>
+        </button>
+        <div id="done-body" hidden>
+          <div class="card"><ul id="done-list"></ul></div>
+          <button id="clear-done" type="button" class="link-btn danger">נקו את מה שבעגלה</button>
+        </div>
+      </section>
     </section>
 
-    <div id="skeleton" class="skeleton" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
-
-    <div id="all-done" class="all-done" hidden>
-      <div class="ad-mark" data-icon="check" data-size="34"></div>
-      <h2><em>הכול</em> בעגלה</h2>
-      <p>כל הכבוד. אפשר לנקות ולהתחיל רשימה חדשה.</p>
-      <button type="button" id="all-done-clear">נקה והתחל מחדש</button>
-    </div>
-
-    <div id="empty" class="empty" hidden>
-      <div class="empty-art" aria-hidden="true">
-        <i class="s1"></i><i class="s2"></i><i class="s3"></i><i class="s4"></i>
-        <div class="empty-cart" data-icon="cart" data-size="52"></div>
+    <!-- ===== Our products (the family's regulars) ===== -->
+    <section id="view-regulars" class="view" aria-labelledby="tab-regulars" hidden>
+      <div class="view-head">
+        <input id="reg-search" type="search" class="search" placeholder="חיפוש במוצרים שלנו" aria-label="חיפוש במוצרים שלנו" autocomplete="off">
+        <button id="reg-add-pinned" type="button" class="btn ghost small" hidden>הוסיפו את הקבועים</button>
       </div>
-      <h2>העגלה מחכה <em>למוצר הראשון</em></h2>
-      <p>כתבו למטה מה חסר בבית.<br>כולם במשפחה יראו את זה מיד.</p>
-    </div>
+      <p class="hint-line">כל מה שהוספתם לרשימה נשמר כאן. + מוסיף לרשימה, ולחיצה על השם מאפשרת לקבע, לתמחר או להסיר.</p>
+      <div id="reg-body"></div>
+    </section>
 
-    <div id="list"></div>
-
-    <section id="done-section" hidden>
-      <div class="section-title">
-        <h2 class="cap">בעגלה <span id="done-count"></span></h2>
-        <button id="clear-done" type="button" class="link">נקה הכול</button>
-      </div>
-      <div class="card"><ul id="done-list"></ul></div>
+    <!-- ===== Prices ===== -->
+    <section id="view-prices" class="view" aria-labelledby="tab-prices" hidden>
+      <div id="prices-body"></div>
     </section>
   </main>
-  </div>
 
   <form id="add-form" class="add-bar" autocomplete="off">
+    <div id="sugg-row" class="sugg-row" hidden></div>
     <div class="add-box">
       <textarea id="add-input" rows="1" maxlength="2000" placeholder="מה חסר בבית?" aria-label="מוצרים להוספה" required></textarea>
-      <button type="button" id="mic" class="sq" aria-label="הקלטה קולית" data-icon="mic" hidden></button>
-      <button type="submit" class="sq accent" aria-label="הוסף מוצר" data-icon="plus" data-size="22"></button>
+      <button type="button" id="mic" class="icon-btn" aria-label="הקלטה קולית" data-icon="mic" hidden></button>
+      <button type="submit" class="add-btn" aria-label="הוסף מוצר" data-icon="plus" data-size="22"></button>
     </div>
   </form>
+
+  <!-- ===== Menu (settings) ===== -->
+  <dialog id="menu-dialog">
+    <h2>הגדרות</h2>
+    <ul class="menu-list">
+      <li><button type="button" id="menu-name"><span>השם שלי</span><span id="menu-name-val" class="val"></span></button></li>
+      <li><button type="button" id="menu-order"><span>סדר המחלקות בסופר</span></button></li>
+      <li><button type="button" id="menu-connect"><span>חיבור מכשירים ושיתוף קישור</span></button></li>
+      <li><button type="button" id="menu-install"><span>הוספה למסך הבית</span></button></li>
+    </ul>
+    <div class="menu-group">
+      <span class="lbl">מראה</span>
+      <div class="seg" role="group" aria-label="מצב תצוגה">
+        <button type="button" data-mode="auto">אוטומטי</button>
+        <button type="button" data-mode="light">בהיר</button>
+        <button type="button" data-mode="dark">כהה</button>
+      </div>
+      <div class="swatches" id="swatches" role="group" aria-label="צבע"></div>
+    </div>
+    <div class="dialog-actions"><span></span><button type="button" class="btn small" data-close>סיום</button></div>
+  </dialog>
 
   <dialog id="shop-dialog" class="shop" aria-labelledby="shop-title">
     <div class="shop-in">
       <header class="shop-bar">
-        <button id="shop-close" type="button" class="round" aria-label="סגור" data-icon="close"></button>
+        <button id="shop-close" type="button" class="icon-btn" aria-label="סגור" data-icon="close"></button>
         <h2 id="shop-title">מצב קניות</h2>
         <span id="shop-time" class="shop-time" aria-hidden="true"></span>
         <span id="shop-pos" class="shop-pos"></span>
@@ -118,7 +137,7 @@
       <div id="shop-dots" class="shop-dots"></div>
       <section id="shop-body" class="shop-body" aria-live="polite"></section>
       <footer class="shop-nav">
-        <button id="shop-prev" type="button" class="btn alt">הקודם</button>
+        <button id="shop-prev" type="button" class="btn ghost">הקודם</button>
         <button id="shop-next" type="button" class="btn">הבא</button>
       </footer>
     </div>
@@ -128,37 +147,35 @@
     <h2 id="picker-title"></h2>
     <p class="hint">נזכור את הבחירה גם בפעם הבאה.</p>
     <div id="picker-list"></div>
-    <button type="button" class="link" data-close>ביטול</button>
+    <button type="button" class="link-btn" data-close>ביטול</button>
   </dialog>
 
   <dialog id="order-dialog">
-    <h2>סדר הסופר</h2>
+    <h2>סדר המחלקות בסופר</h2>
     <p class="hint">סדרו לפי הסדר שבו עוברים בסופר שלכם. הרשימה תתעדכן לכולם.</p>
     <ul id="order-list"></ul>
     <div class="dialog-actions">
-      <button type="button" class="link" id="order-reset">איפוס לברירת מחדל</button>
-      <button type="button" class="primary" data-close>סיום</button>
+      <button type="button" class="link-btn" id="order-reset">איפוס לברירת מחדל</button>
+      <button type="button" class="btn small" data-close>סיום</button>
     </div>
   </dialog>
 
   <dialog id="connect-dialog">
     <h2>חיבור מכשירים</h2>
-    <p class="hint">כל מי שפותח את הקישור הזה רואה ומעדכן את אותה עגלה. שלחו אותו לעצמכם ולמשפחה.</p>
+    <p class="hint">כל מי שפותח את הקישור הזה רואה ומעדכן את אותה עגלה. שלחו אותו למשפחה.</p>
     <div id="qr" class="qr" hidden></div>
     <div class="stack">
-      <a id="wa" class="btn" target="_blank" rel="noopener">שלח בוואטסאפ</a>
-      <button type="button" class="btn secondary" id="copy-link">העתק קישור</button>
-      <button type="button" class="btn secondary" id="install-btn">הוסף למסך הבית</button>
-      <p id="install-help" class="hint" hidden></p>
-      <button type="button" class="link" data-close>סגור</button>
+      <a id="wa" class="btn" target="_blank" rel="noopener">שליחה בוואטסאפ</a>
+      <button type="button" class="btn ghost" id="copy-link">העתקת קישור</button>
+      <button type="button" class="link-btn" data-close>סגור</button>
     </div>
   </dialog>
 
-  <dialog id="theme-dialog">
-    <h2>בחרו צבע</h2>
-    <p class="hint">הצבע נשמר לכל המשפחה.</p>
-    <div class="swatches" id="swatches"></div>
-    <div class="dialog-actions"><span></span><button type="button" class="primary" data-close>סיום</button></div>
+  <dialog id="install-dialog">
+    <h2>הוספה למסך הבית</h2>
+    <p class="hint">כך העגלה נפתחת בלחיצה אחת, כמו כל אפליקציה, ותמיד על אותה רשימה.</p>
+    <ol id="install-steps" class="steps"></ol>
+    <div class="dialog-actions"><span></span><button type="button" class="btn small" data-close>הבנתי</button></div>
   </dialog>
 
   <dialog id="edit-dialog">
@@ -173,12 +190,11 @@
         </div>
       </div>
       <label class="field"><span>הערה</span><input id="edit-note" type="text" maxlength="60" placeholder="למשל: תנובה דווקא"></label>
-      <div class="field"><span>מחלקה</span>
-        <button type="button" id="edit-cat" class="cat-btn"></button>
-      </div>
+      <div class="field"><span>מחלקה</span><button type="button" id="edit-cat" class="row-btn"></button></div>
+      <div class="field"><span>מחיר</span><button type="button" id="edit-price" class="row-btn"></button></div>
       <div class="dialog-actions">
-        <button type="button" class="link danger" id="edit-delete">מחק מוצר</button>
-        <button type="submit" class="primary">שמור</button>
+        <button type="button" class="link-btn danger" id="edit-delete">מחיקה</button>
+        <button type="submit" class="btn small">שמירה</button>
       </div>
     </form>
   </dialog>
@@ -189,13 +205,60 @@
     <form id="name-form" autocomplete="off">
       <label class="field"><input id="name-input" type="text" maxlength="20" placeholder="למשל: אמא" required></label>
       <div class="dialog-actions">
-        <button type="button" class="link" id="name-skip">אולי אחר כך</button>
-        <button type="submit" class="primary">שמור</button>
+        <button type="button" class="link-btn" id="name-skip">אולי אחר כך</button>
+        <button type="submit" class="btn small">שמירה</button>
       </div>
     </form>
   </dialog>
 
-  <div id="confetti" aria-hidden="true"></div>
+  <dialog id="reg-dialog">
+    <h2 id="reg-title"></h2>
+    <p id="reg-sub" class="hint"></p>
+    <div class="field"><span>מחלקה</span><button type="button" id="reg-cat" class="row-btn"></button></div>
+    <div class="field"><span>מחיר</span><button type="button" id="reg-price" class="row-btn"></button></div>
+    <div class="dialog-actions">
+      <button type="button" class="link-btn danger" id="reg-remove">הסרה מהמוצרים שלנו</button>
+      <button type="button" class="btn small ghost" id="reg-pin"></button>
+    </div>
+  </dialog>
+
+  <dialog id="price-dialog">
+    <h2 id="price-title"></h2>
+    <p id="price-sub" class="hint"></p>
+    <form id="price-form" autocomplete="off">
+      <div id="price-fields"></div>
+      <div class="dialog-actions">
+        <button type="button" class="link-btn" data-close>ביטול</button>
+        <button type="submit" class="btn small">שמירה</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="receipt-dialog">
+    <h2>קבלה מהסופר</h2>
+    <p class="hint">הסכום ששילמתם בקופה. אחרי כמה קניות נראה איפה יוצא זול יותר.</p>
+    <form id="receipt-form" autocomplete="off">
+      <label class="field"><span>סופר</span><select id="receipt-store" required></select></label>
+      <label class="field"><span>סכום (₪)</span><input id="receipt-total" type="number" inputmode="decimal" min="1" max="9999" step="0.01" required></label>
+      <label class="field"><span>כמה מוצרים</span><input id="receipt-items" type="number" inputmode="numeric" min="1" max="500" step="1"></label>
+      <div class="dialog-actions">
+        <button type="button" class="link-btn" data-close>ביטול</button>
+        <button type="submit" class="btn small">שמירה</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="store-dialog">
+    <h2>הרשתות להשוואה</h2>
+    <p class="hint">בחרו אילו רשתות להשוות. אפשר להוסיף רשת משלכם ולהזין בה מחירים בעצמכם.</p>
+    <div id="store-list" class="chips-col"></div>
+    <div id="store-sugg" class="sugg-row wrap" hidden></div>
+    <form id="store-form" class="inline-form" autocomplete="off">
+      <input id="store-new" type="text" maxlength="24" placeholder="שם רשת חדשה, למשל: רמי לוי" aria-label="שם רשת חדשה">
+      <button type="submit" class="btn small ghost">הוספה</button>
+    </form>
+    <div class="dialog-actions"><span></span><button type="button" class="btn small" data-close>סיום</button></div>
+  </dialog>
 
   <script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js"></script>
   <script type="module" src="app.js"></script>

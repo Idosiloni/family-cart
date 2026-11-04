@@ -6,9 +6,12 @@ import { firebaseConfig } from "./firebase-config.js";
 import { CATEGORIES, DEFAULT_ORDER, categoryById, classify, normalizeOrder, setLearned, rememberLocally, learnKey } from "./categories.js";
 import { parseItems, splitQty, splitSpoken } from "./parse.js";
 import { icon } from "./icons.js";
-import { greeting, clock, shareText } from "./format.js";
-import { countTo, confetti, toast, reducedMotion } from "./effects.js";
+import { clock, shareText } from "./format.js";
+import { toast, reducedMotion } from "./effects.js";
 import { attachSwipe } from "./swipe.js";
+import { suggestions } from "./regulars.js";
+import { initRegulars } from "./ui-regulars.js";
+import { initPrices } from "./ui-prices.js";
 
 const $ = (id) => document.getElementById(id);
 const statusEl = $("status");
@@ -45,12 +48,12 @@ if (!firebaseConfig.projectId) {
 
 const cartId = getCartId();
 
-// ---- Installable app: manifest is built at runtime so the home-screen icon opens THIS cart ----
+// ---- Installable app: the manifest is built at runtime so the home-screen icon opens THIS cart ----
 (function setupManifest() {
   const manifest = {
     name: "העגלה המשפחתית", short_name: "העגלה", lang: "he", dir: "rtl",
     id: "/", scope: location.origin + "/", start_url: location.origin + location.pathname + location.hash,
-    display: "standalone", background_color: "#0B0F1A", theme_color: "#0B0F1A",
+    display: "standalone", background_color: "#F7F6F2", theme_color: "#F7F6F2",
     icons: [
       { src: location.origin + "/icon-192.png", sizes: "192x192", type: "image/png", purpose: "any maskable" },
       { src: location.origin + "/icon-512.png", sizes: "512x512", type: "image/png", purpose: "any maskable" },
@@ -60,39 +63,65 @@ const cartId = getCartId();
   link.rel = "manifest";
   link.href = URL.createObjectURL(new Blob([JSON.stringify(manifest)], { type: "application/manifest+json" }));
   document.head.append(link);
+  // A service worker (network-first, see sw.js) is what lets browsers offer a real install.
+  if ("serviceWorker" in navigator && !DEMO && (location.protocol === "https:" || location.hostname === "localhost")) {
+    navigator.serviceWorker.register("sw.js").catch(() => {});
+  }
 })();
+
 const itemsRef = collection(db, "carts", cartId, "items");
 const prefsRef = doc(db, "carts", cartId, "settings", "prefs");
 const learnedRef = doc(db, "carts", cartId, "settings", "learned");
 const historyRef = doc(db, "carts", cartId, "settings", "history");
+const pricesRef = doc(db, "carts", cartId, "settings", "prices");
+const storesRef = doc(db, "carts", cartId, "settings", "stores");
+const receiptsRef = collection(db, "carts", cartId, "receipts");
 
 // ---- State ----
 let items = [];
 let order = [...DEFAULT_ORDER];
-let buyStats = {}; // learnKey -> { n: name, c: times added, t: last added }
+let buyStats = {};     // learnKey -> { n: name, c: times added, t: last added, p?: pinned, x?: removed }
+let userPrices = {};   // learnKey -> { [storeId]: unit price the family typed in }
+let storeCfg = { sel: null, custom: [] }; // chains compared in the prices tab
+let receipts = [];     // { id, storeId, total, items, t }
 let me = "";
 let collapsed = new Set();
 try { collapsed = new Set(JSON.parse(localStorage.getItem("collapsed") || "[]")); } catch {}
 try { me = localStorage.getItem("me") || ""; } catch {}
 
-// A colored tile carrying the section's line icon (replaces emoji everywhere).
-function tileEl(cat, size = 20) {
+// A neutral tile carrying the section's line icon.
+function tileEl(cat, size = 18) {
   const t = document.createElement("span");
   t.className = "tile";
-  t.style.setProperty("--tb", cat.bg);
-  t.style.setProperty("--tf", cat.fg);
   t.append(icon(cat.icon, size));
   return t;
 }
-document.querySelectorAll("[data-icon]").forEach((el) => el.append(icon(el.dataset.icon, Number(el.dataset.size) || 20)));
+document.querySelectorAll("[data-icon]").forEach((el) => el.append(icon(el.dataset.icon, Number(el.dataset.size) || 22)));
 document.querySelectorAll("[data-icon-label]").forEach((el) => el.prepend(icon(el.dataset.iconLabel, 18)));
 
 const catOf = (item) => categoryById(item.category || classify(item.name));
 
+// ---- Tabs ----
+let view = "list";
+let regulars, prices; // set up at the bottom, after everything they need exists
+function setView(v) {
+  view = v;
+  for (const id of ["list", "regulars", "prices"]) {
+    $("view-" + id).hidden = id !== v;
+    $("tab-" + id).setAttribute("aria-selected", String(id === v));
+  }
+  $("add-form").classList.toggle("hide", v !== "list");
+  try { sessionStorage.setItem("view", v); } catch {}
+  if (v === "regulars") regulars.refresh();
+  if (v === "prices") prices.refresh();
+  scrollTo(0, 0);
+}
+document.querySelectorAll(".tabs [data-view]").forEach((b) => b.addEventListener("click", () => setView(b.dataset.view)));
+
 // ---- Render ----
 function renderItem(item) {
   const li = document.createElement("li");
-  li.className = item.checked ? "done" : "";
+  li.className = "row" + (item.checked ? " done" : "");
   li.dataset.id = item.id;
 
   const box = document.createElement("input");
@@ -100,14 +129,13 @@ function renderItem(item) {
   box.id = "c-" + item.id;
   box.checked = item.checked;
   box.setAttribute("aria-label", item.name);
-  box.addEventListener("change", () => {
-    if (box.checked) navigator.vibrate?.(14);
-    updateDoc(doc(itemsRef, item.id), { checked: box.checked })
-      .catch(() => setStatus("לא הצלחתי לעדכן, בדוק חיבור לאינטרנט", true));
-  });
+  box.addEventListener("change", () => toggleItem(item, box.checked));
 
-  const label = document.createElement("label");
-  label.htmlFor = box.id;
+  // Tapping the name opens the editor (quantity, note, price, delete); the circle or a swipe checks it off.
+  const text = document.createElement("button");
+  text.type = "button";
+  text.className = "row-text";
+  text.setAttribute("aria-label", "עריכת " + item.name);
   const name = document.createElement("span");
   name.className = "name";
   name.textContent = item.name; // textContent: never HTML
@@ -117,30 +145,17 @@ function renderItem(item) {
     q.textContent = "×" + item.qty;
     name.append(q);
   }
-  label.append(name);
+  text.append(name);
   const metaParts = [item.note, item.addedBy].filter(Boolean);
   if (metaParts.length) {
     const meta = document.createElement("span");
     meta.className = "meta";
     meta.textContent = metaParts.join(" · ");
-    label.append(meta);
+    text.append(meta);
   }
+  text.addEventListener("click", () => openEdit(item));
 
-  const edit = document.createElement("button");
-  edit.type = "button";
-  edit.className = "ibtn";
-  edit.setAttribute("aria-label", "ערוך " + item.name);
-  edit.append(icon("edit", 18));
-  edit.addEventListener("click", () => openEdit(item));
-
-  const del = document.createElement("button");
-  del.type = "button";
-  del.className = "ibtn";
-  del.setAttribute("aria-label", "מחק " + item.name);
-  del.append(icon("close", 18));
-  del.addEventListener("click", () => deleteWithUndo([item], `${item.name} נמחק`));
-
-  li.append(box, label, edit, del);
+  li.append(box, text);
   attachSwipe(li, { onRight: () => toggleItem(item, !item.checked), onLeft: () => deleteWithUndo([item], `${item.name} נמחק`) });
   return li;
 }
@@ -155,15 +170,13 @@ function playFlip(first) {
   if (!first.size || reducedMotion()) return;
   document.querySelectorAll("li[data-id]").forEach((li) => {
     const a = first.get(li.dataset.id), b = li.getBoundingClientRect();
-    if (!a || !b.width) return; // brand-new rows keep their pop-in
-    li.style.animation = "none"; // rebuilt rows that already existed must not replay the CSS pop-in
+    if (!a || !b.width) return;
     const dx = a.left - b.left, dy = a.top - b.top;
     if (!dx && !dy) return;
-    // Groups clip their rows (overflow: hidden) and paint below the done list; lift them while a row travels.
     const group = li.closest(".group");
     group?.classList.add("flip");
     li.animate([{ transform: `translate(${dx}px, ${dy}px)` }, { transform: "none" }],
-      { duration: 350, easing: "cubic-bezier(.19, 1, .22, 1)" })
+      { duration: 260, easing: "cubic-bezier(.2, .8, .2, 1)" })
       .finished.then(() => group?.classList.remove("flip"), () => {});
   });
 }
@@ -180,31 +193,21 @@ function render() {
     .map((id) => ({ cat: categoryById(id), items: todo.filter((i) => catOf(i).id === id) }))
     .filter((g) => g.items.length);
 
-  $("list").replaceChildren(...groups.map((g, gi) => {
+  $("list").replaceChildren(...groups.map((g) => {
     const section = document.createElement("section");
     section.className = "group";
-    if (first.size) section.style.animation = "none"; // the rise-in is for the first paint, not every re-render
-    else section.style.animationDelay = Math.min(gi, 6) * 50 + "ms"; // cascade the sections in
-    section.style.setProperty("--cc", g.cat.bg);
-    section.style.setProperty("--cf", g.cat.fg);
     const h = document.createElement("button");
     h.type = "button";
     h.className = "group-head";
-    const tile = tileEl(g.cat, 22);
-    tile.classList.add("gh-tile");
     const gname = document.createElement("span");
-    gname.className = "gh-name";
     gname.textContent = g.cat.name;
     const count = document.createElement("span");
     count.className = "count";
     count.textContent = g.items.length;
     const chev = document.createElement("span");
     chev.className = "chev";
-    chev.append(icon("chevron", 20));
-    const folio = document.createElement("span");
-    folio.className = "folio";
-    folio.textContent = String(gi + 1).padStart(2, "0");
-    h.append(tile, folio, gname, count, chev);
+    chev.append(icon("chevron", 16));
+    h.append(gname, count, chev);
     const isCollapsed = collapsed.has(g.cat.id);
     section.classList.toggle("collapsed", isCollapsed);
     h.setAttribute("aria-expanded", String(!isCollapsed));
@@ -229,38 +232,39 @@ function render() {
   $("skeleton").hidden = true;
   $("empty").hidden = items.length > 0;
   $("all-done").hidden = !(items.length > 0 && todo.length === 0);
-  updateHero(todo.length, done.length, todo);
+  updateSummary(todo.length, done.length);
   renderSuggestions();
   if (focusedBox) document.getElementById(focusedBox)?.focus({ preventScroll: true });
   playFlip(first);
   if (shopDlg.open) renderShop();
+  regulars?.refresh();
+  prices?.refresh();
 }
 
-function setSummary(todoN, doneN) {
+function updateSummary(todoN, doneN) {
   const total = todoN + doneN;
-  $("summary").textContent = !total ? "הרשימה ריקה" : todoN ? "נשארו לקחת" : "הכול בעגלה, כל הכבוד";
-  $("meta").textContent = total ? `${doneN} מתוך ${total} כבר בעגלה` : "";
+  $("big-todo").textContent = todoN;
   $("big-todo").hidden = !todoN;
+  $("summary").textContent = !total ? "הרשימה ריקה" : todoN ? "נשארו לקחת" : "הכול בעגלה";
+  $("meta").textContent = total && todoN && doneN ? `· ${doneN} כבר בעגלה` : "";
+  $("shop-btn").disabled = !todoN;
+  $("send-btn").disabled = !todoN;
 }
 
-function updateHero(todoN, doneN, todo) {
-  const total = todoN + doneN;
-  const pct = total ? Math.round((doneN / total) * 100) : 0;
-  countTo($("big-todo"), todoN);
-  setSummary(todoN, doneN);
-
-  // Celebrate the moment the last item gets checked off (not on first load).
-  if (prevTodo !== null && prevTodo > 0 && todoN === 0 && total > 0) confetti();
-  prevTodo = todoN;
+// The "in the cart" list stays folded until someone wants it.
+let doneOpen = false;
+try { doneOpen = localStorage.getItem("doneOpen") === "1"; } catch {}
+function applyDoneOpen() {
+  $("done-body").hidden = !doneOpen;
+  $("done-toggle").setAttribute("aria-expanded", String(doneOpen));
 }
-let prevTodo = null;
+applyDoneOpen();
+$("done-toggle").addEventListener("click", () => {
+  doneOpen = !doneOpen;
+  try { localStorage.setItem("doneOpen", doneOpen ? "1" : "0"); } catch {}
+  applyDoneOpen();
+});
 
-function renderGreeting() {
-  $("greeting").textContent = greeting() + (me ? ", " + me : "");
-}
-renderGreeting();
-
-let loaded = false;
 // Delete now, offer to bring it back. Rules only allow creating unchecked items, so checked ones are re-checked afterwards.
 async function restoreItems(list) {
   const batch = writeBatch(db);
@@ -281,6 +285,12 @@ function deleteWithUndo(list, label) {
   toast(label, { label: "ביטול", run: () => restoreItems(keep).catch(() => setStatus("לא הצלחתי לשחזר", true)) });
 }
 
+function toggleItem(item, checked) {
+  if (checked) navigator.vibrate?.(14);
+  updateDoc(doc(itemsRef, item.id), { checked })
+    .catch(() => setStatus("לא הצלחתי לעדכן, בדוק חיבור לאינטרנט", true));
+}
+
 // ---- Shopping mode: one section at a time, in store-walking order ----
 const shopDlg = $("shop-dialog");
 const shop = { idx: 0, left: new Map(), timer: 0, wake: null, dir: 0, start: 0, startDone: 0, tick: 0, summary: null, prev: null };
@@ -292,12 +302,6 @@ function shopSections() {
   }).filter((s) => s.todo.length + s.done.length);
 }
 
-function toggleItem(item, checked) {
-  if (checked) navigator.vibrate?.(14);
-  updateDoc(doc(itemsRef, item.id), { checked })
-    .catch(() => setStatus("לא הצלחתי לעדכן, בדוק חיבור לאינטרנט", true));
-}
-
 function shopRow(item) {
   const row = document.createElement("div");
   row.className = "shop-row" + (item.checked ? " done" : "");
@@ -306,7 +310,7 @@ function shopRow(item) {
   row.tabIndex = 0;
   const mark = document.createElement("span");
   mark.className = "shop-mark";
-  mark.append(icon("check", 20));
+  mark.append(icon("check", 18));
   const name = document.createElement("span");
   name.className = "shop-name";
   name.textContent = item.name;
@@ -360,7 +364,6 @@ function renderShop() {
     const b = document.createElement("button");
     b.type = "button";
     b.className = "shop-dot" + (i === shop.idx ? " cur" : "") + (s.todo.length ? "" : " full");
-    b.style.setProperty("--cc", s.cat.bg);
     b.setAttribute("aria-label", s.cat.name + (s.todo.length ? `, נשארו ${s.todo.length}` : ", הושלם"));
     if (i === shop.idx) b.setAttribute("aria-current", "step");
     b.addEventListener("click", () => { clearTimeout(shop.timer); shop.dir = Math.sign(i - shop.idx); shop.idx = i; renderShop(); });
@@ -369,8 +372,7 @@ function renderShop() {
 
   const head = document.createElement("div");
   head.className = "shop-head";
-  head.style.setProperty("--cc", sec.cat.bg);
-  const tile = tileEl(sec.cat, 26);
+  const tile = tileEl(sec.cat, 24);
   tile.classList.add("shop-tile");
   const titles = document.createElement("div");
   const h = document.createElement("h3");
@@ -384,9 +386,6 @@ function renderShop() {
   if (!remaining) {
     const fin = document.createElement("div");
     fin.className = "shop-fin";
-    const mark = document.createElement("div");
-    mark.className = "ad-mark";
-    mark.append(icon("check", 34));
     const t = document.createElement("h3");
     t.textContent = "הכול בעגלה";
     const p = document.createElement("p");
@@ -405,14 +404,18 @@ function renderShop() {
     }
     p.textContent = shop.summary ? `${shop.summary.n} מוצרים ב-${shop.summary.min} דקות` : "כל הכבוד, סיימתם את הקניות.";
     const prevP = document.createElement("p");
-    prevP.className = "shop-prev-trip";
     if (shop.summary && shop.prev) prevP.textContent = `בפעם הקודמת: ${shop.prev.n} מוצרים ב-${shop.prev.min} דקות`;
+    const receipt = document.createElement("button");
+    receipt.type = "button";
+    receipt.className = "btn ghost";
+    receipt.textContent = "הוספת קבלה מהסופר";
+    receipt.addEventListener("click", () => prices.openReceipt({ items: shop.summary?.n }));
     const done = document.createElement("button");
     done.type = "button";
     done.className = "btn";
     done.textContent = "סיום";
-    done.addEventListener("click", () => { shopDlg.close(); confetti(); });
-    fin.append(mark, t, p, ...(prevP.textContent ? [prevP] : []), done);
+    done.addEventListener("click", () => shopDlg.close());
+    fin.append(t, p, ...(prevP.textContent ? [prevP] : []), receipt, done);
     body.replaceChildren(fin);
   } else {
     body.replaceChildren(head, ...sec.todo.map(shopRow), ...sec.done.map(shopRow));
@@ -424,8 +427,8 @@ function renderShop() {
   document.querySelector(".shop-nav").hidden = !remaining;
 
   if (shop.dir && !reducedMotion()) {
-    body.animate([{ opacity: 0, transform: `translateX(${shop.dir * -28}px)` }, { opacity: 1, transform: "none" }],
-      { duration: 260, easing: "cubic-bezier(.19, 1, .22, 1)" });
+    body.animate([{ opacity: 0, transform: `translateX(${shop.dir * -24}px)` }, { opacity: 1, transform: "none" }],
+      { duration: 220, easing: "cubic-bezier(.2, .8, .2, 1)" });
   }
   shop.dir = 0;
 
@@ -435,7 +438,7 @@ function renderShop() {
   if (prevLeft > 0 && sec.todo.length === 0 && remaining) {
     shop.timer = setTimeout(() => {
       const now = shopSections();
-      const next = now.findIndex((s, i) => i > shop.idx && s.todo.length) ;
+      const next = now.findIndex((s, i) => i > shop.idx && s.todo.length);
       const target = next >= 0 ? next : now.findIndex((s) => s.todo.length);
       if (target >= 0 && shopDlg.open) { shop.dir = Math.sign(target - shop.idx) || 1; shop.idx = target; renderShop(); }
     }, 750);
@@ -476,6 +479,8 @@ $("shop-next").addEventListener("click", () => { clearTimeout(shop.timer); shop.
 shopDlg.addEventListener("close", () => { clearTimeout(shop.timer); clearInterval(shop.tick); shop.wake?.release?.().catch(() => {}); shop.wake = null; });
 document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible" && shopDlg.open) keepAwake(); });
 
+// ---- Live data ----
+let loaded = false;
 onSnapshot(
   query(itemsRef, orderBy("createdAt")),
   (snap) => {
@@ -487,6 +492,8 @@ onSnapshot(
     if (!firstLoad) {
       const fresh = items.filter((i) => !known.has(i.id) && i.addedBy && i.addedBy !== me);
       if (fresh.length) toast(fresh.length === 1 ? `${fresh[0].addedBy} הוסיף/ה ${fresh[0].name}` : `${fresh[0].addedBy} הוסיף/ה ${fresh.length} מוצרים`);
+    } else {
+      showInstallBanner();
     }
     render();
   },
@@ -499,6 +506,7 @@ onSnapshot(
 onSnapshot(historyRef, (snap) => {
   buyStats = snap.exists() ? (snap.data().items || {}) : {};
   renderSuggestions();
+  regulars?.refresh();
 }, (err) => console.error(err));
 
 // Corrections the family made ("לחמים belongs in bakery"): used for every future item.
@@ -515,31 +523,55 @@ onSnapshot(prefsRef, (snap) => {
   if ($("order-dialog").open) renderOrderDialog();
 }, (err) => console.error(err));
 
-// ---- Change an item's section ----
-const picker = $("picker");
-let pickedItem = null;
+onSnapshot(pricesRef, (snap) => {
+  userPrices = snap.exists() ? (snap.data().p || {}) : {};
+  prices?.refresh();
+}, (err) => console.error(err));
 
-function openPicker(item) {
-  pickedItem = item;
-  $("picker-title").textContent = `איפה ${item.name} בסופר?`;
+onSnapshot(storesRef, (snap) => {
+  const d = snap.exists() ? snap.data() : {};
+  storeCfg = { sel: Array.isArray(d.sel) ? d.sel : null, custom: Array.isArray(d.custom) ? d.custom : [] };
+  prices?.refresh();
+}, (err) => console.error(err));
+
+onSnapshot(query(receiptsRef, orderBy("t")), (snap) => {
+  receipts = snap.docs.map((d) => ({ id: d.id, ...d.data() })).sort((a, b) => b.t - a.t);
+  prices?.refresh();
+}, (err) => console.error(err));
+
+// ---- Change a product's section (for a list item, or for one of "our products") ----
+const picker = $("picker");
+
+function learnCategory(name, catId) {
+  const key = rememberLocally(name, catId);
+  if (key) {
+    setDoc(learnedRef, { map: { [key]: catId } }, { merge: true })
+      .catch(() => setStatus("לא הצלחתי לזכור את הבחירה", true));
+  }
+}
+
+function openCategoryPicker(name, currentId, onPick) {
+  $("picker-title").textContent = `איפה ${name} בסופר?`;
   $("picker-list").replaceChildren(...CATEGORIES.map((c) => {
     const b = document.createElement("button");
     b.type = "button";
-    b.className = "pick" + (c.id === catOf(item).id ? " current" : "");
-    b.append(tileEl(c, 18), document.createTextNode(c.name));
+    b.className = "pick" + (c.id === currentId ? " current" : "");
+    b.append(tileEl(c, 16), document.createTextNode(c.name));
     b.addEventListener("click", () => {
-      updateDoc(doc(itemsRef, item.id), { category: c.id })
-        .catch(() => setStatus("לא הצלחתי לעדכן קטגוריה", true));
-      const key = rememberLocally(item.name, c.id);
-      if (key) {
-        setDoc(learnedRef, { map: { [key]: c.id } }, { merge: true })
-          .catch(() => setStatus("לא הצלחתי לזכור את הבחירה", true));
-      }
+      learnCategory(name, c.id);
+      onPick?.(c.id);
       picker.close();
     });
     return b;
   }));
   picker.showModal();
+}
+
+function openPicker(item) {
+  openCategoryPicker(item.name, catOf(item).id, (catId) => {
+    updateDoc(doc(itemsRef, item.id), { category: catId })
+      .catch(() => setStatus("לא הצלחתי לעדכן קטגוריה", true));
+  });
 }
 
 // ---- Edit the store walking order ----
@@ -561,7 +593,7 @@ function renderOrderDialog() {
     down.type = "button"; down.textContent = "↓"; down.disabled = idx === order.length - 1;
     down.setAttribute("aria-label", `הזז למטה: ${c.name}`);
     down.addEventListener("click", () => moveCategory(idx, 1));
-    li.append(tileEl(c, 18), label, up, down);
+    li.append(tileEl(c, 16), label, up, down);
     return li;
   }));
 }
@@ -578,7 +610,6 @@ function moveCategory(idx, delta) {
     .catch(() => setStatus("לא הצלחתי לשמור את הסדר", true));
 }
 
-$("order-btn").addEventListener("click", () => { renderOrderDialog(); orderDialog.showModal(); });
 $("order-reset").addEventListener("click", () => {
   order = [...DEFAULT_ORDER];
   renderOrderDialog();
@@ -593,8 +624,8 @@ document.querySelectorAll("dialog").forEach((d) => {
 
 // ---- Actions ----
 const addInput = $("add-input");
-const autoGrow = () => { addInput.style.height = "auto"; addInput.style.height = Math.min(addInput.scrollHeight + 2, 168) + "px"; };
-addInput.addEventListener("input", autoGrow);
+const autoGrow = () => { addInput.style.height = "auto"; addInput.style.height = Math.min(addInput.scrollHeight + 2, 160) + "px"; };
+addInput.addEventListener("input", () => { autoGrow(); renderSuggestions(); });
 // Desktop: Enter sends, Shift+Enter = new line. Touch: Enter = new line, the + button sends.
 const isTouch = matchMedia("(pointer: coarse)").matches;
 addInput.addEventListener("keydown", (e) => {
@@ -611,7 +642,7 @@ function flash(text) {
   statusTimer = setTimeout(() => setStatus(""), 3000);
 }
 
-// Adds product names (already split). Skips what is already waiting; remembers counts for quick-add.
+// Adds product names (already split). Skips what is already waiting; remembers counts for "our products".
 async function addNames(rawNames, restoreText = "") {
   const parsed = rawNames.map(splitQty).filter((p) => p.name.length >= 2);
   if (!parsed.length) return;
@@ -631,16 +662,16 @@ async function addNames(rawNames, restoreText = "") {
       if (me) data.addedBy = me;
       batch.set(doc(itemsRef), data);
       const key = learnKey(name);
-      if (key) seen[key] = { n: name, c: increment(1), t: now };
+      if (key) seen[key] = { n: name, c: increment(1), t: now, x: false }; // x:false brings back a product that was removed
     });
     await batch.commit();
     if (Object.keys(seen).length) {
-      setDoc(historyRef, { items: seen }, { merge: true }).catch(() => {}); // quick-add stats are best-effort
+      setDoc(historyRef, { items: seen }, { merge: true }).catch(() => {}); // the products database is best-effort
     }
     const skipped = parsed.length - fresh.length;
     if (fresh.length > 1 || skipped) {
       const added = fresh.length === 1 ? "נוסף מוצר אחד" : `נוספו ${fresh.length} מוצרים`;
-      flash(`${added} ✓` + (skipped ? ` (${skipped} כבר היו ברשימה)` : ""));
+      flash(`${added}` + (skipped ? ` (${skipped} כבר היו ברשימה)` : ""));
     }
   } catch (err) {
     console.error(err);
@@ -660,24 +691,23 @@ $("add-form").addEventListener("submit", (e) => {
   addNames(names, text);
 });
 
-// ---- Quick add chips: what this family buys most (starter set until there is history) ----
-const STARTERS = ["חלב", "ביצים", "לחם", "עגבניות", "מלפפונים", "במבה", "קולה", "אורז"];
+// ---- Quick add chips: appear while typing (or when the list is empty), built from "our products" ----
+let addFocused = false;
+addInput.addEventListener("focus", () => { addFocused = true; renderSuggestions(); });
+addInput.addEventListener("blur", () => setTimeout(() => { addFocused = false; renderSuggestions(); }, 150));
 function renderSuggestions() {
+  const row = $("sugg-row");
   const onList = new Set(items.map((i) => learnKey(i.name)));
-  const fromHistory = Object.entries(buyStats)
-    .filter(([k, v]) => v && typeof v.n === "string" && !onList.has(k))
-    .sort((a, b) => (b[1].c || 0) - (a[1].c || 0) || (b[1].t || 0) - (a[1].t || 0))
-    .map(([, v]) => v.n);
-  const starters = STARTERS.filter((n) => !onList.has(learnKey(n)) && !fromHistory.includes(n));
-  const names = [...fromHistory, ...starters].slice(0, 10);
-
-  $("sugg").hidden = names.length === 0;
-  $("sugg-row").replaceChildren(...names.map((n) => {
-    const cat = categoryById(classify(n));
+  const names = suggestions(buyStats, onList, { typed: addInput.value, limit: 10 });
+  const show = names.length > 0 && (addFocused || addInput.value.trim() || (loaded && items.length === 0));
+  row.hidden = !show;
+  if (!show) { row.replaceChildren(); return; }
+  row.replaceChildren(...names.map((n) => {
     const b = document.createElement("button");
     b.type = "button";
     b.className = "sugg";
-    b.append(tileEl(cat, 16), document.createTextNode(n));
+    b.textContent = n;
+    b.addEventListener("pointerdown", (e) => e.preventDefault()); // keep the keyboard open
     b.addEventListener("click", () => addNames([n]));
     return b;
   }));
@@ -735,8 +765,8 @@ function openEdit(item) {
   $("edit-name").value = item.name;
   $("edit-note").value = item.note || "";
   setQty(item.qty || 1);
-  const c = catOf(item);
-  $("edit-cat").replaceChildren(tileEl(c, 18), document.createTextNode(c.name));
+  $("edit-cat").replaceChildren(document.createTextNode(catOf(item).name));
+  $("edit-price").replaceChildren(document.createTextNode(prices?.describe(item.name) || "הוספת מחיר"));
   editDialog.showModal();
 }
 
@@ -759,31 +789,17 @@ $("edit-cat").addEventListener("click", () => {
   editDialog.close();
   openPicker(it);
 });
+$("edit-price").addEventListener("click", () => {
+  if (!editing) return;
+  const it = editing;
+  editDialog.close();
+  prices.openPriceDialog(it.name);
+});
 $("edit-delete").addEventListener("click", () => {
   if (!editing) return;
   deleteWithUndo([editing], `${editing.name} נמחק`);
   editDialog.close();
 });
-
-// ---- Who am I (shown on items I add) ----
-const nameDialog = $("name-dialog");
-function askName() { $("name-input").value = me; nameDialog.showModal(); }
-$("greeting").addEventListener("click", askName);
-$("greeting").addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") askName(); });
-$("name-form").addEventListener("submit", (e) => {
-  e.preventDefault();
-  me = $("name-input").value.trim().slice(0, 20);
-  try { localStorage.setItem("me", me); } catch {}
-  renderGreeting();
-  nameDialog.close();
-});
-$("name-skip").addEventListener("click", () => {
-  try { localStorage.setItem("meSkipped", "1"); } catch {}
-  nameDialog.close();
-});
-try {
-  if (!DEMO && !me && localStorage.getItem("meSkipped") !== "1") setTimeout(askName, 900);
-} catch {}
 
 $("all-done-clear").addEventListener("click", () => $("clear-done").click());
 $("clear-done").addEventListener("click", () => {
@@ -791,22 +807,64 @@ $("clear-done").addEventListener("click", () => {
   if (done.length) deleteWithUndo(done, `${done.length} מוצרים נמחקו`);
 });
 
-// ---- Themes (shared through prefs; localStorage avoids a flash of the default) ----
+// ---- Who am I (shown on items I add) ----
+const nameDialog = $("name-dialog");
+function renderMyName() { $("menu-name-val").textContent = me || "לא הוגדר"; }
+function askName() { $("name-input").value = me; nameDialog.showModal(); }
+$("name-form").addEventListener("submit", (e) => {
+  e.preventDefault();
+  me = $("name-input").value.trim().slice(0, 20);
+  try { localStorage.setItem("me", me); } catch {}
+  renderMyName();
+  nameDialog.close();
+});
+$("name-skip").addEventListener("click", () => {
+  try { localStorage.setItem("meSkipped", "1"); } catch {}
+  nameDialog.close();
+});
+renderMyName();
+try {
+  if (!DEMO && !me && localStorage.getItem("meSkipped") !== "1") setTimeout(askName, 900);
+} catch {}
+
+// ---- Settings sheet: name, store order, connect devices, home screen, appearance ----
+const menuDialog = $("menu-dialog");
+// Open another dialog from the sheet: close the sheet first so only one is ever on screen.
+const fromMenu = (open) => () => { menuDialog.close(); open(); };
+$("menu-btn").addEventListener("click", () => menuDialog.showModal());
+$("menu-name").addEventListener("click", fromMenu(askName));
+$("menu-order").addEventListener("click", fromMenu(() => { renderOrderDialog(); orderDialog.showModal(); }));
+$("menu-connect").addEventListener("click", fromMenu(openConnect));
+$("menu-install").addEventListener("click", fromMenu(showInstall));
+
+// Appearance: auto (follow the phone), light, dark. Stored per device.
+const modeButtons = [...document.querySelectorAll(".seg [data-mode]")];
+function syncMode() {
+  const cur = document.documentElement.dataset.mode || "auto";
+  modeButtons.forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.mode === cur)));
+}
+modeButtons.forEach((b) => b.addEventListener("click", () => {
+  const m = b.dataset.mode;
+  if (m === "auto") delete document.documentElement.dataset.mode; else document.documentElement.dataset.mode = m;
+  try { m === "auto" ? localStorage.removeItem("mode") : localStorage.setItem("mode", m); } catch {}
+  syncMode();
+}));
+syncMode();
+
+// Colours are shared through prefs; localStorage avoids a flash of the default.
 const THEMES = [
-  { id: "mint", name: "מנטה", color: "#5CF2C0" },
-  { id: "violet", name: "סגול", color: "#A58BFF" },
-  { id: "coral", name: "אלמוג", color: "#FF6B8A" },
-  { id: "sky", name: "תכלת", color: "#4CC9F0" },
-  { id: "amber", name: "ענבר", color: "#FFC46B" },
+  { id: "mint", name: "ירוק", color: "#2F7D5B" },
+  { id: "sky", name: "כחול", color: "#2F6FA8" },
+  { id: "coral", name: "אדמה", color: "#B3523B" },
+  { id: "violet", name: "סגול", color: "#6A5AA6" },
+  { id: "amber", name: "חרדל", color: "#9A6710" },
 ];
 function applyTheme(id) {
   const t = THEMES.find((x) => x.id === id) || THEMES[0];
   document.documentElement.dataset.theme = t.id;
   try { localStorage.setItem("theme", t.id); } catch {}
-  document.querySelectorAll(".swatch").forEach((b) => b.setAttribute("aria-pressed", b.dataset.id === t.id));
+  document.querySelectorAll(".swatch").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.id === t.id)));
 }
-try { applyTheme(localStorage.getItem("theme")); } catch { applyTheme(); }
-
 $("swatches").replaceChildren(...THEMES.map((t) => {
   const b = document.createElement("button");
   b.type = "button"; b.className = "swatch"; b.dataset.id = t.id;
@@ -817,8 +875,7 @@ $("swatches").replaceChildren(...THEMES.map((t) => {
   });
   return b;
 }));
-applyTheme(document.documentElement.dataset.theme);
-$("theme-btn").addEventListener("click", () => $("theme-dialog").showModal());
+try { applyTheme(localStorage.getItem("theme")); } catch { applyTheme(); }
 
 // ---- Connect devices: WhatsApp link, copy, QR ----
 function openConnect() {
@@ -833,65 +890,65 @@ function openConnect() {
   } catch { qrBox.hidden = true; }
   $("connect-dialog").showModal();
 }
-$("share").addEventListener("click", openConnect);
+$("copy-link").addEventListener("click", async () => {
+  try { await navigator.clipboard.writeText(location.href); $("copy-link").textContent = "הועתק"; }
+  catch { $("copy-link").textContent = "לא הצלחתי להעתיק"; }
+  setTimeout(() => { $("copy-link").textContent = "העתקת קישור"; }, 2000);
+});
 
-// ---- "Add to home screen" ----
+// ---- Add to home screen ----
 let installPrompt = null;
 addEventListener("beforeinstallprompt", (e) => { e.preventDefault(); installPrompt = e; });
-const isStandalone = matchMedia("(display-mode: standalone)").matches || navigator.standalone;
-if (isStandalone) $("install-btn").hidden = true;
-$("install-btn").addEventListener("click", async () => {
-  const help = $("install-help");
+const isStandalone = matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
+if (isStandalone) $("menu-install").parentElement.hidden = true;
+
+function showInstall() {
   if (installPrompt) {
     installPrompt.prompt();
-    await installPrompt.userChoice.catch(() => {});
-    installPrompt = null;
+    installPrompt.userChoice.catch(() => {}).finally(() => { installPrompt = null; });
     return;
   }
   const ios = /iphone|ipad|ipod/i.test(navigator.userAgent);
-  help.textContent = ios
-    ? "באייפון: לחצו על כפתור השיתוף (ריבוע עם חץ) בתחתית Safari, גללו ובחרו \"הוסף למסך הבית\"."
-    : "באנדרואיד: לחצו על שלוש הנקודות בדפדפן Chrome ובחרו \"הוסף למסך הבית\" או \"התקן אפליקציה\".";
-  help.hidden = false;
-});
-$("copy-link").addEventListener("click", async () => {
-  try { await navigator.clipboard.writeText(location.href); $("copy-link").textContent = "הועתק ✓"; }
-  catch { $("copy-link").textContent = "לא הצלחתי להעתיק"; }
-  setTimeout(() => { $("copy-link").textContent = "העתק קישור"; }, 2000);
-});
+  const steps = ios
+    ? ["פתחו את הקישור של העגלה ב-Safari.", "לחצו על כפתור השיתוף (ריבוע עם חץ) בתחתית המסך.", "גללו ובחרו \"הוספה למסך הבית\", ואשרו."]
+    : ["פתחו את הקישור של העגלה ב-Chrome.", "לחצו על שלוש הנקודות בפינה העליונה.", "בחרו \"התקנת אפליקציה\" או \"הוספה למסך הבית\"."];
+  $("install-steps").replaceChildren(...steps.map((s) => { const li = document.createElement("li"); li.textContent = s; return li; }));
+  $("install-dialog").showModal();
+}
 
-// One-time hint: the link is what joins devices together.
-let hintSeen = false;
-try { hintSeen = localStorage.getItem("hintSeen") === "1"; } catch {}
-$("hint").hidden = hintSeen || DEMO;
+// A one-time nudge, only in a browser tab (never inside the installed app, never in the demo).
+function showInstallBanner() {
+  let dismissed = false;
+  try { dismissed = localStorage.getItem("installDismissed") === "1"; } catch {}
+  $("install-banner").hidden = isStandalone || DEMO || dismissed;
+}
+$("install-go").addEventListener("click", showInstall);
+$("install-x").addEventListener("click", () => {
+  $("install-banner").hidden = true;
+  try { localStorage.setItem("installDismissed", "1"); } catch {}
+});
 if (DEMO) $("demo-bar").hidden = false;
-const dismissHint = () => { $("hint").hidden = true; try { localStorage.setItem("hintSeen", "1"); } catch {} };
-$("hint-x").addEventListener("click", dismissHint);
-$("hint-go").addEventListener("click", () => { dismissHint(); openConnect(); });
 
-// ---- Light / dark switch (stored per device; system setting is the default) ----
-const modeBtn = $("mode");
-const isDark = () => (document.documentElement.dataset.mode || (matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark")) === "dark";
-const syncMode = () => modeBtn.setAttribute("aria-checked", String(isDark()));
-syncMode();
-modeBtn.addEventListener("click", () => {
-  const next = isDark() ? "light" : "dark";
-  document.documentElement.dataset.mode = next;
-  try { localStorage.setItem("mode", next); } catch {}
-  syncMode();
+// ---- Tabs that need everything above ----
+regulars = initRegulars({
+  $, icon, toast, flash, setStatus, catOf, openCategoryPicker, learnCategory,
+  get items() { return items; },
+  get stats() { return buyStats; },
+  get prices() { return prices; },
+  addNames,
+  save: (patch) => setDoc(historyRef, { items: patch }, { merge: true }),
+});
+prices = initPrices({
+  $, icon, toast, setStatus, DEMO, setView,
+  get items() { return items; },
+  get userPrices() { return userPrices; },
+  get storeCfg() { return storeCfg; },
+  get receipts() { return receipts; },
+  savePrices: (patch) => setDoc(pricesRef, { p: patch }, { merge: true }),
+  saveStores: (cfg) => setDoc(storesRef, cfg, { merge: true }),
+  addReceipt: (r) => addDoc(receiptsRef, r),
+  deleteReceipt: (id) => deleteDoc(doc(receiptsRef, id)),
+  deleteField,
 });
 
-// ---- Intro loader: a short 0-100% count, once per session ----
-(function boot() {
-  const el = $("boot");
-  let seen = false;
-  try { seen = sessionStorage.getItem("booted") === "1"; sessionStorage.setItem("booted", "1"); } catch {}
-  if (seen || matchMedia("(prefers-reduced-motion: reduce)").matches) { el.remove(); return; }
-  const t0 = performance.now(), dur = 550; // a list opened from a WhatsApp link in the aisle should not wait on a loader
-  (function f(t) {
-    const k = Math.min(1, (t - t0) / dur);
-    $("boot-n").textContent = Math.round((1 - Math.pow(1 - k, 3)) * 100) + "%";
-    if (k < 1) requestAnimationFrame(f);
-    else { el.classList.add("out"); setTimeout(() => el.remove(), 450); }
-  })(t0);
-})();
+try { const v = sessionStorage.getItem("view"); if (["regulars", "prices"].includes(v)) setView(v); } catch {}
