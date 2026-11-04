@@ -55,7 +55,8 @@ function score(tokens, vtokens, product) {
       for (const j of leftover) {
         const t = tokens[j];
         // A leftover number must be one this product allows; a leftover word must not change the product.
-        const bad = isNumeric(t) ? !nums.has(t) : vtokens[j].some((v) => not.has(v) || NOT_ANY.has(v));
+        // Produce also takes a plain small count ("קישוא 3" = three zucchini).
+        const bad = isNumeric(t) ? !(nums.has(t) || (product.kg && /^\d{1,2}$/.test(t))) : vtokens[j].some((v) => not.has(v) || NOT_ANY.has(v));
         if (bad) { ok = false; break; }
       }
       if (ok) best = Math.max(best, alias.length);
@@ -89,6 +90,15 @@ function unitPrice(userEntry, product, chainId) {
 }
 
 const qtyOf = (item) => (Number.isInteger(item.qty) && item.qty > 0 ? item.qty : 1);
+// Produce is priced per kilo: one typed unit stands for `unitKg` kilos ("3 אפרסמון" = 3 x 0.2 kg). Those totals are estimates.
+// The count for a produce item: the quantity field, or a small number typed in the name ("קישוא 3", "3 אפרסמון").
+function effectiveQty(item, product) {
+  const q = qtyOf(item);
+  if (!product?.kg || q !== 1) return q;
+  const n = tokenize(item.name).find((t) => /^\d{1,2}$/.test(t));
+  return n && +n >= 1 ? +n : 1;
+}
+const factorOf = (product) => (product?.kg && product.unitKg > 0 ? product.unitKg : 1);
 
 // Compare chains on the items priced at EVERY chain in `chains` (the intersection), so a chain that
 // lacks a price for something can never look cheapest. Everything else is reported, not guessed.
@@ -106,7 +116,10 @@ export function compareStores({ items, products, userPrices = {}, chains }) {
       if (p != null) { prices[id] = p; covered[id]++; }
     }
     const n = Object.keys(prices).length;
-    const row = { name: item.name, qty: qtyOf(item), prices, product: product ? { id: product.id, name: product.name, size: product.size } : null };
+    const row = {
+      name: item.name, qty: effectiveQty(item, product), factor: factorOf(product), est: !!product?.kg, prices,
+      product: product ? { id: product.id, name: product.name, size: product.size } : null,
+    };
     if (n === ids.length && n > 0) comparable.push(row);
     else if (n > 0) partial.push(row);
     else unpriced.push(item.name);
@@ -115,7 +128,7 @@ export function compareStores({ items, products, userPrices = {}, chains }) {
   const rows = chains.map((c) => ({
     chainId: c.id,
     name: c.name,
-    total: round2(comparable.reduce((sum, r) => sum + r.prices[c.id] * r.qty, 0)),
+    total: round2(comparable.reduce((sum, r) => sum + r.prices[c.id] * r.qty * r.factor, 0)),
     pricedCount: covered[c.id],
   }));
 
@@ -127,6 +140,7 @@ export function compareStores({ items, products, userPrices = {}, chains }) {
   return {
     rows,
     comparableCount: comparable.length,
+    estimatedCount: comparable.filter((r) => r.est).length, // produce priced per kilo with an assumed weight
     comparable,
     unpriced,
     partial: partial.map((r) => r.name),
@@ -141,9 +155,10 @@ export function estimateTotal({ items, products, userPrices = {}, chainId }) {
   let total = 0, pricedCount = 0;
   const missing = [];
   for (const item of items) {
-    const p = unitPrice(userPrices[priceKey(item.name)], matchProduct(item.name, products), chainId);
+    const product = matchProduct(item.name, products);
+    const p = unitPrice(userPrices[priceKey(item.name)], product, chainId);
     if (p == null) missing.push(item.name);
-    else { total += p * qtyOf(item); pricedCount++; }
+    else { total += p * effectiveQty(item, product) * factorOf(product); pricedCount++; }
   }
   return { total: round2(total), pricedCount, missing };
 }

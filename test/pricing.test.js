@@ -98,7 +98,20 @@ test("matching: everyday names find the right product, lookalikes find none", ()
   assert.equal(idOf("תה"), "tea");
   assert.equal(idOf("גבינה צהובה מגורדת"), "yellow-grated");
   assert.equal(idOf("גבינה צהובה"), "yellow-sliced");
-  assert.equal(idOf("עגבניות"), null); // produce is not in the price data
+  // fresh produce (priced per kg)
+  assert.equal(idOf("עגבניות"), "tomato");
+  assert.equal(idOf("עגבניות שרי"), "cherry-tomato");
+  assert.equal(idOf("מלפפונים"), "cucumber");
+  assert.equal(idOf("בצלים"), "onion");
+  assert.equal(idOf("בצל אדום"), "red-onion");
+  assert.equal(idOf("קישוא"), "zucchini");
+  assert.equal(idOf("תפוחי אדמה"), "potato");
+  assert.equal(idOf("תפוח אדמה"), "potato");
+  assert.equal(idOf("תפוחים"), "apple");
+  assert.equal(idOf("אפרסמון"), "persimmon");
+  assert.equal(idOf("קישוא 3"), "zucchini");
+  assert.equal(idOf("פירות"), null);
+  assert.equal(idOf("פירות שנראים טוב"), null);
   assert.equal(idOf(""), null);
 });
 
@@ -237,7 +250,10 @@ test("prices.json: every product has a barcode, at least two chain prices, a san
   for (const p of real) {
     assert.ok(!ids.has(p.id), `duplicate id ${p.id}`);
     ids.add(p.id);
-    assert.ok(/^\d{6,14}$/.test(p.barcode), `${p.id} barcode`);
+    if (p.kg) {
+      assert.ok(p.unitKg > 0 && p.unitKg <= 3, `${p.id} unitKg`);
+      assert.ok(Object.values(p.prices).every((x) => x >= 1 && x <= 100), `${p.id} per-kg price range`);
+    } else assert.ok(/^\d{6,14}$/.test(p.barcode), `${p.id} barcode`);
     const v = Object.values(p.prices);
     assert.ok(v.length >= 2, `${p.id} is priced at ${v.length} chain(s)`);
     assert.ok(Math.max(...v) / Math.min(...v) <= 2.2, `${p.id} prices differ too much`);
@@ -245,4 +261,40 @@ test("prices.json: every product has a barcode, at least two chain prices, a san
   assert.ok(real.length >= 150, `only ${real.length} products`);
   const atOsher = real.filter((p) => p.prices["osher-ad"]).length;
   assert.ok(atOsher >= 100, `only ${atOsher} products priced at Osher Ad`);
+});
+
+test("produce is priced per kilo with an assumed weight, and the total is labelled an estimate", () => {
+  const products = [
+    { id: "persimmon", name: "אפרסמון", aliases: ["אפרסמון"], kg: true, unitKg: 0.2, prices: { a: 10, b: 20 } },
+    { id: "milk", name: "חלב", aliases: ["חלב"], prices: { a: 7, b: 8 } },
+  ];
+  const chains = [{ id: "a", name: "A" }, { id: "b", name: "B" }];
+  const r = compareStores({ items: [{ name: "אפרסמון", qty: 3 }, { name: "חלב", qty: 2 }], products, chains });
+  assert.equal(r.rows.find((x) => x.chainId === "a").total, 3 * 0.2 * 10 + 2 * 7); // 6 + 14
+  assert.equal(r.rows.find((x) => x.chainId === "b").total, 3 * 0.2 * 20 + 2 * 8); // 12 + 16
+  assert.equal(r.estimatedCount, 1);
+  assert.equal(r.comparable.find((x) => x.name === "אפרסמון").est, true);
+  assert.equal(r.comparable.find((x) => x.name === "חלב").est, false);
+  assert.equal(estimateTotal({ items: [{ name: "אפרסמון", qty: 3 }], products, chainId: "a" }).total, 6);
+});
+
+test("a family-typed price for a produce item is per kilo, like the file prices", () => {
+  const products = [{ id: "t", name: "עגבניה", aliases: ["עגבניות"], kg: true, unitKg: 1, prices: { a: 8, b: 9 } }];
+  const r = compareStores({
+    items: [{ name: "עגבניות", qty: 2 }], products, chains: [{ id: "a", name: "A" }, { id: "b", name: "B" }],
+    userPrices: { [priceKey("עגבניות")]: { a: 5 } },
+  });
+  assert.equal(r.rows.find((x) => x.chainId === "a").total, 10);
+  assert.equal(r.rows.find((x) => x.chainId === "b").total, 18);
+});
+
+test("a small number typed in a produce name is its count, never for packaged products", () => {
+  const products = [
+    { id: "z", name: "קישוא", aliases: ["קישוא"], kg: true, unitKg: 0.2, prices: { a: 10, b: 10 } },
+    { id: "m", name: "חלב", aliases: ["חלב"], nums: ["3%"], prices: { a: 7, b: 7 } },
+  ];
+  const chains = [{ id: "a", name: "A" }, { id: "b", name: "B" }];
+  const r = compareStores({ items: [{ name: "קישוא 3" }], products, chains });
+  assert.equal(r.rows[0].total, 6); // 3 x 0.2 kg x 10
+  assert.equal(compareStores({ items: [{ name: "חלב 5" }], products, chains }).comparableCount, 0); // 5 is not an allowed number for milk
 });
