@@ -52,7 +52,7 @@ const cartId = getCartId();
 (function setupManifest() {
   const manifest = {
     name: "העגלה המשפחתית", short_name: "העגלה", lang: "he", dir: "rtl",
-    id: "/", scope: location.origin + "/", start_url: location.origin + location.pathname + location.hash,
+    id: "/", scope: location.origin + "/", start_url: location.origin + location.pathname + (DEMO ? "" : location.hash), // never bake "#demo" into an installed icon
     display: "standalone", background_color: "#F7F6F2", theme_color: "#F7F6F2",
     icons: [
       { src: location.origin + "/icon-192.png", sizes: "192x192", type: "image/png", purpose: "any maskable" },
@@ -900,7 +900,7 @@ $("copy-link").addEventListener("click", async () => {
 let installPrompt = null;
 addEventListener("beforeinstallprompt", (e) => { e.preventDefault(); installPrompt = e; });
 const isStandalone = matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
-if (isStandalone) $("menu-install").parentElement.hidden = true;
+if (isStandalone || DEMO) $("menu-install").parentElement.hidden = true;
 
 function showInstall() {
   if (installPrompt) {
