@@ -5,6 +5,10 @@ import { firebaseConfig } from "./firebase-config.js";
 
 const SDK = "https://www.gstatic.com/firebasejs/10.14.1/";
 
+// The installed app (home-screen icon) never runs the demo: an icon that was added while the demo was open
+// would otherwise start on "#demo" forever. In that case drop the hash and open the family's own cart.
+const installed = matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
+if (installed && location.hash === "#demo") history.replaceState(null, "", location.pathname);
 export const DEMO = location.hash === "#demo";
 
 let fs, app;
