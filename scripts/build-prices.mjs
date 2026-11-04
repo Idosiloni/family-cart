@@ -191,6 +191,41 @@ async function loadChain(c, cacheDir) {
   };
 }
 
+// Prices for one reference product. The `codes` barcode priced at the most chains wins (first wins a tie), and
+// every chain that carries it is priced from it. A chain that does NOT carry it may fall back to an `equiv`
+// barcode, but only one that was checked by hand to be the same brand, variant and pack size (see
+// reference-products.mjs). Weighted items are skipped, they have chain-internal codes.
+// loaded: [{ id, items: Map(code -> { price, weighted }) }]  ->  { code, prices, n, equivUsed } | null
+export function pickPrices(product, loaded) {
+  let best = null;
+  for (const code of product.codes) {
+    const prices = {};
+    let weighted = false;
+    for (const l of loaded) {
+      const it = l.items.get(code);
+      if (!it) continue;
+      if (it.weighted) weighted = true;
+      prices[l.id] = Math.round(it.price * 100) / 100;
+    }
+    const n = Object.keys(prices).length;
+    if (!weighted && n >= 2 && (!best || n > best.n)) best = { code, prices, n };
+  }
+  if (!best) return null;
+  const equivUsed = [];
+  for (const l of loaded) {
+    if (best.prices[l.id] != null) continue;
+    for (const code of product.equiv?.[l.id] || []) {
+      const it = l.items.get(code);
+      if (!it || it.weighted) continue;
+      best.prices[l.id] = Math.round(it.price * 100) / 100;
+      equivUsed.push({ chain: l.id, code, price: best.prices[l.id] });
+      break;
+    }
+  }
+  best.n = Object.keys(best.prices).length;
+  return { ...best, equivUsed };
+}
+
 async function main() {
   const cacheDir = opt("cache");
   const loaded = [];
@@ -208,20 +243,9 @@ async function main() {
 
   const products = [];
   for (const p of PRODUCTS) {
-    let best = null;
-    for (const code of p.codes) {
-      const prices = {};
-      let weighted = false;
-      for (const l of loaded) {
-        const it = l.items.get(code);
-        if (!it) continue;
-        if (it.weighted) weighted = true;
-        prices[l.id] = Math.round(it.price * 100) / 100;
-      }
-      const n = Object.keys(prices).length;
-      if (!weighted && n >= 2 && (!best || n > best.n)) best = { code, prices, n };
-    }
+    const best = pickPrices(p, loaded);
     if (!best) { console.warn(`  skip ${p.id} (${p.name}): fewer than 2 chains priced it`); continue; }
+    for (const e of best.equivUsed) console.log(`  equiv ${p.id}: ${e.chain} uses ${e.code} (main ${best.code}) -> ${e.price}`);
     const v = Object.values(best.prices);
     if (Math.max(...v) / Math.min(...v) > 2.2) console.warn(`  ? ${p.id} ${p.name}: prices differ a lot`, best.prices);
     products.push({ id: p.id, name: p.name, size: p.size, aliases: p.aliases, ...(p.not ? { not: p.not } : {}), ...(p.nums ? { nums: p.nums } : {}), barcode: best.code, prices: best.prices });
