@@ -40,10 +40,11 @@ Family WhatsApp groups are where shopping lists go to die: items get buried, bou
 
 Israeli law makes the big chains publish a price file per branch. `scripts/build-prices.mjs` downloads the public ones, takes a curated list of ~100 branded, fixed-size products (`scripts/reference-products.mjs`, matched by barcode), and writes the small `public/prices.json` the app loads.
 
-- **Chains with data today:** Shufersal Deal (Ra'anana), Carrefour Hyper (Ra'anana) and Hazi Hinam (Hod HaSharon). The branch and the date are shown in the app. These are **shelf prices of one branch, without club discounts or promotions**, so the register can differ.
-- **Rami Levy, Osher Ad, Yochananof, Victory** are not included: their files sit behind a login (or could not be fetched automatically), and this project does not script logins. Add any chain in the app and type its prices yourself; your prices always win over the file prices.
+- **Chains with data today:** Shufersal Deal (Ra'anana), Carrefour Hyper (Ra'anana), Hazi Hinam (Hod HaSharon) and Osher Ad (Kfar Saba). The branch and the date are shown in the app. These are **shelf prices of one branch, without club discounts or promotions**, so the register can differ.
+- **Osher Ad is loaded from a file a person downloaded**, not fetched by the script, because its files sit behind a login and the builder never logs in anywhere. Download the branch's `PriceFull` file yourself (for example with the open-source [israeli-supermarket-scarpers](https://github.com/OpenIsraeliSupermarkets/israeli-supermarket-scarpers)) and pass it with `--osherad <file>`.
+- **Rami Levy, Yochananof, Victory** are not included for the same reason (or could not be fetched automatically). Add any chain in the app and type its prices yourself; your prices always win over the file prices.
 - **The comparison is fair by construction:** a chain's total only counts items that have a price at *every* compared chain, and the rest are listed as "no price". A chain with gaps can never look cheapest.
-- **Refresh the data:** `node scripts/build-prices.mjs --fetch --cache /tmp/price-files` (Node 22, no dependencies). Shufersal's download links are signed and expire, so the script re-reads the listing every run.
+- **Refresh the data:** `node scripts/build-prices.mjs --fetch --cache /tmp/price-files --osherad <PriceFull file>` (Node 22, no dependencies; leave out `--osherad` to build without it). Shufersal's download links are signed and expire, so the script re-reads the listing every run.
 - `public/stores.js` is a research directory of 11 chains with sources and three dated surveys. It deliberately has no price index: surveys use different baskets and dates.
 
 ## How it works

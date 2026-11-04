@@ -196,7 +196,7 @@ export function initPrices(ctx) {
     for (const c of STORES) {
       const el = h("div", "chain");
       el.append(h("h3", "", c.name));
-      const files = c.priceFiles === "public" ? "המחירים שלה כלולים בהשוואה" : c.priceFiles === "login" ? "קובץ המחירים שלה מאחורי התחברות, אפשר להזין מחירים ידנית" : "אין לנו מחירים שלה, אפשר להזין ידנית";
+      const files = c.hasData ? "המחירים שלה כלולים בהשוואה" : c.priceFiles === "login" ? "קובץ המחירים שלה מאחורי התחברות, אפשר להזין מחירים ידנית" : "אין לנו מחירים שלה, אפשר להזין ידנית";
       el.append(h("p", "", [c.traits, files].filter(Boolean).join(". ")));
       if (c.researchNote) el.append(h("p", "", c.researchNote));
       const src = (c.sources || []).find((u) => u.startsWith("http"));

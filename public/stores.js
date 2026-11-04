@@ -5,7 +5,8 @@
 //
 //   id          matches prices.json chain ids where we hold real shelf prices (hasData: true)
 //   type        "discount" | "hard-discount" | "regular" | "premium" | "religious" (the way it markets itself)
-//   priceFiles  "public"  the chain's price files are downloadable without a login and are used for prices.json
+//   priceFiles  "manual"  behind a login: a person downloads the file and passes it to build-prices.mjs (Osher Ad)
+//               "public"  the chain's price files are downloadable without a login and are used for prices.json
 //               "login"   the files sit behind the publishedprices.co.il login; deliberately not used
 //               "none"    no file we could fetch automatically (see researchNote)
 
@@ -47,10 +48,10 @@ export const STORES = [
     sources: ["https://he.wikipedia.org/wiki/רשת_יוחננוף"],
   },
   {
-    id: "osher-ad", name: "אושר עד", type: "discount", hasData: false,
+    id: "osher-ad", name: "אושר עד", type: "discount", hasData: true,
     traits: "רשת דיסקאונט של סניפים גדולים (כ-6,000 מ״ר בממוצע). לא מכוונת רק לציבור החרדי.",
-    website: "https://www.osherad.co.il", priceFiles: "login",
-    researchNote: "ויקיפדיה: נוסדה ב-2009, 24 סניפים ב-2026, שלישית בגודלה במכירות לפי דירוג D&B 2023. נתפסת כזולה במדד תפיסת המחיר של מעריב 2025. קבצי המחירים בכניסה עם שם משתמש, לכן אין לנו מחירים.",
+    website: "https://www.osherad.co.il", priceFiles: "manual",
+    researchNote: "ויקיפדיה: נוסדה ב-2009, 24 סניפים ב-2026, שלישית בגודלה במכירות לפי דירוג D&B 2023. נתפסת כזולה במדד תפיסת המחיר של מעריב 2025. קבצי המחירים שלה בכניסה עם שם משתמש, ולכן המחירים באפליקציה הם מקובץ שהורד ידנית (לא אוטומטית) של אושר עד כפר סבא.",
     sources: ["https://he.wikipedia.org/wiki/אושר_עד", "https://www.maariv.co.il/economy/israel/article-1258470"],
   },
   {
