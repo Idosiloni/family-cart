@@ -35,10 +35,29 @@ service cloud.firestore {
       allow delete: if cartId.size() >= 16;
     }
 
+    // Receipts: what the family actually paid at a supermarket (store id, total, item count). No edits, only add and delete.
+    match /carts/{cartId}/receipts/{receiptId} {
+      allow get, list: if cartId.size() >= 16;
+      allow create: if cartId.size() >= 16
+        && request.resource.data.keys().hasOnly(['storeId', 'total', 'items', 't'])
+        && request.resource.data.storeId is string
+        && request.resource.data.storeId.size() > 0
+        && request.resource.data.storeId.size() <= 30
+        && request.resource.data.total is number
+        && request.resource.data.total > 0
+        && request.resource.data.total <= 99999
+        && request.resource.data.t is number
+        && (!('items' in request.resource.data)
+            || (request.resource.data.items is int && request.resource.data.items >= 1 && request.resource.data.items <= 1000));
+      allow delete: if cartId.size() >= 16;
+    }
+
     // Per-cart settings docs:
     //  prefs   - supermarket walking order + color theme
     //  learned - the family's corrections of product -> section (map of name -> section id)
-    //  history - how often each product was added (for the quick-add chips)
+    //  history - "our products": how often each product was added, pinned or removed (quick-add chips and the products tab)
+    //  prices  - shelf prices the family typed in: map of product -> { store id -> unit price }
+    //  stores  - which chains the prices tab compares, plus chains the family added
     match /carts/{cartId}/settings/{docId} {
       allow get: if cartId.size() >= 16;
       allow create, update: if cartId.size() >= 16
@@ -59,6 +78,18 @@ service cloud.firestore {
             && request.resource.data.keys().hasOnly(['items'])
             && request.resource.data.items is map
             && request.resource.data.items.size() <= 300)
+          ||
+          (docId == 'prices'
+            && request.resource.data.keys().hasOnly(['p'])
+            && request.resource.data.p is map
+            && request.resource.data.p.size() <= 400)
+          ||
+          (docId == 'stores'
+            && request.resource.data.keys().hasOnly(['sel', 'custom'])
+            && (!('sel' in request.resource.data)
+                || (request.resource.data.sel is list && request.resource.data.sel.size() <= 20))
+            && (!('custom' in request.resource.data)
+                || (request.resource.data.custom is list && request.resource.data.custom.size() <= 10)))
         );
     }
   }

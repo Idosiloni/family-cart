@@ -1,7 +1,7 @@
 // In-memory stand-in for the slice of the Firestore API that app.js uses.
 // Loaded instead of the real SDK when the URL hash is "#demo" (see db.js), so the app can be
 // tried, screenshotted and tested without a Firebase project or touching anyone's real cart.
-import { classify } from "./categories.js";
+import { classify, learnKey } from "./categories.js";
 
 const DELETE = { __op: "delete" };
 const store = new Map();      // "carts/demo/items/abc" -> data
@@ -100,6 +100,17 @@ const now = Date.now();
   if (addedBy) data.addedBy = addedBy;
   store.set(`carts/demo/items/seed${i}`, data);
 });
+
+// "Our products": what this family has bought before (counts), a few pinned.
+const t0 = now - 86400000;
+store.set("carts/demo/settings/history", { items: Object.fromEntries([
+  ["חלב 3%", 14, true], ["ביצים", 12, true], ["לחם מלא", 11, true], ["עגבניות שרי", 9], ["מלפפונים", 9], ["במבה", 8],
+  ["קולה זירו", 7], ["חזה עוף", 6], ["אורז בסמטי", 5], ["גבינה צהובה", 5], ["פסטה", 4], ["שמן זית", 3], ["אבקת כביסה", 2],
+].map(([n, c, p], i) => [learnKey(n), { n, c, t: t0 - i * 3600000, ...(p ? { p: true } : {}) }])) });
+
+// Receipts from earlier trips, so the prices tab has something to compare.
+[["shufersal", 412.5, 31, 21], ["carrefour", 389, 28, 14], ["rami-levy", 361.9, 29, 8], ["shufersal", 398.2, 27, 3], ["carrefour", 402.4, 30, 0]]
+  .forEach(([storeId, total, n, daysAgo], i) => store.set(`carts/demo/receipts/r${i}`, { storeId, total, items: n, t: now - daysAgo * 86400000 - 3600000 }));
 
 // A "family member" adds something a while after load, so the live-sync toast can be seen.
 if (typeof document !== "undefined") {

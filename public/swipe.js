@@ -5,7 +5,7 @@ export function attachSwipe(li, { onRight, onLeft }) {
   let x0 = null, y0 = 0, dx = 0, live = false;
   const reset = () => { x0 = null; live = false; li.classList.remove("swiping", "sw-check", "sw-del", "armed"); li.style.transform = ""; };
   li.addEventListener("pointerdown", (e) => {
-    if (e.target.closest("button, input")) return;
+    if (e.target.closest("input, button:not(.row-text)")) return;
     x0 = e.clientX; y0 = e.clientY; dx = 0; live = false;
   });
   li.addEventListener("pointermove", (e) => {
