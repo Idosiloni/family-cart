@@ -20,6 +20,9 @@ Family WhatsApp groups are where shopping lists go to die: items get buried, bou
 - **Several carts, joined with a code.** One phone can hold many carts (home, the parents', friends); the cart name at the top switches between them. To invite someone, open the menu, *Invite to the cart*: it shows an 8-character code (`KFRT-4829`), a QR and a short `#join=` link, valid for 7 days. The other person scans, taps the link or types the code under *My carts*. The old 32-character link still works and is offered as a permanent fallback.
 - **Gentle motion.** Rows ease in (and glow briefly when someone else adds one), checking an item pops the circle and slides the row away, the count rolls, the tab underline glides, sections fold smoothly, dialogs rise and fade, and finishing the list or a shopping trip throws a little confetti. Transform and opacity only, mostly under 300 ms, and all of it is off when the phone asks for reduced motion.
 - **A little colour.** Still one accent, but each supermarket section has a soft tint on its icon, whoever added an item gets a small colour dot, and a thin bar shows how much of the list is already in the cart. Quiet in light and dark.
+- **Suggestions on the list.** A quiet strip under the summary: *maybe missing* (things the family buys regularly that are overdue, learned from how often each was added; tap to add, × for "not now" for three days) and *the usuals* (pinned products not on the list, add one or all).
+- **Works with no reception.** The cart is kept on the phone, so it opens and can be edited in the shop; changes are sent when the connection returns, and a note says when you are offline.
+- **Finish early.** In shopping mode, *finish* ends the trip with a summary of what wasn't taken (it stays on the list).
 - **Live sync.** Everyone with the cart link sees changes instantly. When someone else adds an item while your screen is open, a toast says who added what.
 - **Auto-sorting into supermarket sections.** A word-aware Hebrew classifier (with a catalog of Israeli products and brands) files each item under produce, dairy, bakery, and so on. Correct it once and the family's correction is remembered for every future item.
 - **Our products.** Everything the family ever adds is counted and kept. Tap `+` to add it again, pin the weekly regulars and add them all in one tap, change a product's section, or remove it. While typing, matching regulars appear above the keyboard.
@@ -137,7 +140,7 @@ firestore.rules     validation and access rules (items, receipts, settings docs)
 
 - More chains in the price data (Victory's portal needs more reverse-engineering; the login-only chains stay manual)
 - A scheduled job to refresh `prices.json`, and produce/weighted items
-- Offline lists (Firestore persistence), and test the Firestore rules with the emulator
+- Test the Firestore rules with the emulator, and the offline start on a real phone
 - English interface (the classifier is Hebrew-specific, so this needs its own catalog)
 
 ## License

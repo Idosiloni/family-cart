@@ -9,7 +9,7 @@ import { icon } from "./icons.js";
 import { clock, shareText } from "./format.js";
 import { toast, reducedMotion, leaveRow, burst, rollIn, EASE_OUT } from "./effects.js";
 import { attachSwipe } from "./swipe.js";
-import { suggestions } from "./regulars.js";
+import { suggestions, gapSince, dueItems, missingPinned, agoText } from "./regulars.js";
 import { initRegulars } from "./ui-regulars.js";
 import { initPrices } from "./ui-prices.js";
 import { startCart } from "./cart-boot.js";
@@ -279,6 +279,7 @@ function render() {
   prevTodoN = todo.length;
   updateSummary(todo.length, done.length);
   renderSuggestions();
+  renderStrip();
   if (focusedBox) document.getElementById(focusedBox)?.focus({ preventScroll: true });
   playFlip(first);
   if (shopDlg.open) renderShop();
@@ -420,9 +421,11 @@ function renderShop() {
   shop.idx = Math.min(Math.max(shop.idx, 0), secs.length - 1);
   const sec = secs[shop.idx];
   const remaining = secs.reduce((n, s) => n + s.todo.length, 0);
+  const ending = !remaining || shop.ended; // everything is in the cart, or the person pressed "finish" with some left
   const focusedKey = document.activeElement?.closest?.("#shop-body .shop-row") ? [...document.querySelectorAll("#shop-body .shop-row")].indexOf(document.activeElement) : -1;
 
-  $("shop-pos").textContent = remaining ? `${shop.idx + 1} מתוך ${secs.length}` : "";
+  $("shop-finish").hidden = ending;
+  $("shop-pos").textContent = !ending ? `${shop.idx + 1} מתוך ${secs.length}` : "";
   $("shop-dots").replaceChildren(...secs.map((s, i) => {
     const b = document.createElement("button");
     b.type = "button";
@@ -446,29 +449,44 @@ function renderShop() {
   head.append(tile, titles);
 
   const body = $("shop-body");
-  if (!remaining) {
+  if (ending) {
     const fin = document.createElement("div");
     fin.className = "shop-fin";
     const t = document.createElement("h3");
-    t.textContent = "הכול בעגלה";
+    t.textContent = remaining ? "סיימתם את הקניות" : "הכול בעגלה";
     const p = document.createElement("p");
-    if (!shop.summary && shop.start) {
+    if (shop.start && (!shop.summary || remaining || !shop.stored)) {
       const n = items.filter((i) => i.checked).length - shop.startDone;
       if (n > 0) {
         const min = Math.max(1, Math.round((Date.now() - shop.start) / 60000));
         shop.summary = { n, min };
-        shop.celebrate = true;
-        if (!DEMO) try {
+        // Only a finished trip (nothing left) is celebrated and kept for the "last time" comparison.
+        if (!remaining && !shop.stored) { shop.stored = true; shop.celebrate = true; if (!DEMO) try {
           const trips = JSON.parse(localStorage.getItem("trips:" + cartId) || "[]");
           shop.prev = trips[0] || null;
           trips.unshift({ t: Date.now(), n, min });
           localStorage.setItem("trips:" + cartId, JSON.stringify(trips.slice(0, 20)));
-        } catch {}
+        } catch {} }
       }
     }
-    p.textContent = shop.summary ? `${shop.summary.n} מוצרים ב-${shop.summary.min} דקות` : "כל הכבוד, סיימתם את הקניות.";
+    const nItems = (n) => (n === 1 ? "מוצר אחד" : `${n} מוצרים`), nMin = (n) => (n === 1 ? "דקה" : `${n} דקות`);
+    p.textContent = shop.summary ? `${nItems(shop.summary.n)} ב${nMin(shop.summary.min)}` : remaining ? "לא סימנתם כלום בקניות הזאת." : "כל הכבוד, סיימתם את הקניות.";
     const prevP = document.createElement("p");
-    if (shop.summary && shop.prev) prevP.textContent = `בפעם הקודמת: ${shop.prev.n} מוצרים ב-${shop.prev.min} דקות`;
+    if (shop.summary && shop.prev) prevP.textContent = `בפעם הקודמת: ${nItems(shop.prev.n)} ב${nMin(shop.prev.min)}`;
+    // Things that were not found or skipped stay on the list for next time; say so, and offer to go back.
+    const leftover = [];
+    if (remaining) {
+      const names = secs.flatMap((s) => s.todo.map((i) => i.name));
+      const lp = document.createElement("p");
+      lp.className = "shop-left";
+      lp.textContent = `לא נלקחו (${remaining}): ${names.slice(0, 6).join(", ")}${names.length > 6 ? ` ועוד ${names.length - 6}` : ""}. הם נשארים ברשימה.`;
+      const back = document.createElement("button");
+      back.type = "button";
+      back.className = "link-btn";
+      back.textContent = "חזרה לקניות";
+      back.addEventListener("click", () => { shop.ended = false; renderShop(); });
+      leftover.push(lp, back);
+    }
     const receipt = document.createElement("button");
     receipt.type = "button";
     receipt.className = "btn ghost";
@@ -479,7 +497,7 @@ function renderShop() {
     done.className = "btn";
     done.textContent = "סיום";
     done.addEventListener("click", () => shopDlg.close());
-    fin.append(t, p, ...(prevP.textContent ? [prevP] : []), receipt, done);
+    fin.append(t, p, ...(prevP.textContent ? [prevP] : []), ...leftover, receipt, done);
     body.replaceChildren(fin);
     if (shop.celebrate) { shop.celebrate = false; requestAnimationFrame(() => burst(t)); }
   } else {
@@ -487,9 +505,9 @@ function renderShop() {
   }
   if (focusedKey >= 0) body.querySelectorAll(".shop-row")[focusedKey]?.focus({ preventScroll: true });
 
-  $("shop-prev").disabled = shop.idx === 0 || !remaining;
-  $("shop-next").disabled = shop.idx === secs.length - 1 || !remaining;
-  document.querySelector(".shop-nav").hidden = !remaining;
+  $("shop-prev").disabled = shop.idx === 0 || ending;
+  $("shop-next").disabled = shop.idx === secs.length - 1 || ending;
+  document.querySelector(".shop-nav").hidden = ending;
 
   if (shop.dir && !reducedMotion()) {
     body.animate([{ opacity: 0, transform: `translateX(${shop.dir * -24}px)` }, { opacity: 1, transform: "none" }],
@@ -523,6 +541,8 @@ $("shop-btn").addEventListener("click", () => {
   shop.startDone = items.filter((i) => i.checked).length;
   shop.summary = null;
   shop.prev = null;
+  shop.ended = false;
+  shop.stored = false;
   renderShop();
   shopDlg.showModal();
   keepAwake();
@@ -539,6 +559,7 @@ $("send-btn").addEventListener("click", async () => {
   window.open("https://wa.me/?text=" + encodeURIComponent(text), "_blank", "noopener");
 });
 $("shop-close").addEventListener("click", () => shopDlg.close());
+$("shop-finish").addEventListener("click", () => { clearTimeout(shop.timer); shop.ended = true; renderShop(); });
 $("shop-prev").addEventListener("click", () => { clearTimeout(shop.timer); shop.dir = -1; shop.idx--; renderShop(); });
 $("shop-next").addEventListener("click", () => { clearTimeout(shop.timer); shop.dir = 1; shop.idx++; renderShop(); });
 shopDlg.addEventListener("close", () => { clearTimeout(shop.timer); clearInterval(shop.tick); shop.wake?.release?.().catch(() => {}); shop.wake = null; });
@@ -585,6 +606,7 @@ onSnapshot(
 onSnapshot(historyRef, (snap) => {
   buyStats = snap.exists() ? (snap.data().items || {}) : {};
   renderSuggestions();
+  renderStrip();
   regulars?.refresh();
 }, (err) => console.error(err));
 
@@ -741,7 +763,11 @@ async function addNames(rawNames, restoreText = "") {
       if (me) data.addedBy = me;
       batch.set(doc(itemsRef), data);
       const key = learnKey(name);
-      if (key) seen[key] = { n: name, c: increment(1), t: now, x: false }; // x:false brings back a product that was removed
+      if (key) {
+        seen[key] = { n: name, c: increment(1), t: now, x: false }; // x:false brings back a product that was removed
+        const gap = gapSince(buyStats[key], now); // how long since it was last bought: this is what "running low" learns from
+        if (gap) { seen[key].g = increment(gap.g); seen[key].m = increment(gap.m); }
+      }
     });
     await batch.commit();
     if (Object.keys(seen).length) {
@@ -769,6 +795,84 @@ $("add-form").addEventListener("submit", (e) => {
   addInput.focus();
   addNames(names, text);
 });
+
+// ---- The suggestion strip on the list: what is probably running low, and the usual regulars ----
+const snoozeKey = "snooze:" + cartId;
+function readSnoozed() {
+  try {
+    const now = Date.now();
+    const o = JSON.parse(localStorage.getItem(snoozeKey) || "{}");
+    return Object.fromEntries(Object.entries(o).filter(([, until]) => until > now));
+  } catch { return {}; }
+}
+let stripSig = "";
+function renderStrip() {
+  const el = $("suggest-strip");
+  const onList = new Set(items.map((i) => learnKey(i.name)));
+  const due = loaded ? dueItems(buyStats, onList, { snoozed: readSnoozed() }) : [];
+  const dueKeys = new Set(due.map((d) => d.key));
+  const usual = loaded ? missingPinned(buyStats, onList).filter((r) => !dueKeys.has(r.key)).slice(0, 8) : [];
+  const sig = due.map((d) => d.key).join() + "|" + usual.map((r) => r.key).join();
+  if (sig === stripSig) return; // nothing changed: leave the chips (and their entrance) alone
+  stripSig = sig;
+  el.hidden = !due.length && !usual.length;
+  let n = 0;
+  const chip = (text, sub, onAdd, onSnooze) => {
+    const wrap = document.createElement("span");
+    wrap.className = "chip-wrap";
+    wrap.style.setProperty("--i", Math.min(n++, 8));
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "sugg";
+    b.append(text);
+    if (sub) { const s = document.createElement("small"); s.textContent = sub; b.append(s); }
+    b.addEventListener("click", onAdd);
+    wrap.append(b);
+    if (onSnooze) {
+      const x = document.createElement("button");
+      x.type = "button";
+      x.className = "chip-x";
+      x.setAttribute("aria-label", `לא עכשיו: ${text}`);
+      x.append(icon("close", 12));
+      x.addEventListener("click", onSnooze);
+      wrap.append(x);
+    }
+    return wrap;
+  };
+  const row = (label, chips, extra) => {
+    const r = document.createElement("div");
+    r.className = "strip-row";
+    const l = document.createElement("span");
+    l.className = "strip-label";
+    l.textContent = label;
+    const c = document.createElement("div");
+    c.className = "strip-chips";
+    c.append(...chips);
+    r.append(l, c);
+    if (extra) r.append(extra);
+    return r;
+  };
+  const rows = [];
+  if (due.length) {
+    rows.push(row("אולי חסר", due.map((d) => chip(d.name, agoText(d.since), () => addNames([d.name]), () => {
+      const o = readSnoozed();
+      o[d.key] = Date.now() + 3 * 86400000; // "not now": leave it be for three days
+      try { localStorage.setItem(snoozeKey, JSON.stringify(o)); } catch {}
+      stripSig = "";
+      renderStrip();
+    }))));
+  }
+  if (usual.length) {
+    const all = document.createElement("button");
+    all.type = "button";
+    all.className = "link-btn";
+    all.textContent = usual.length > 1 ? "הוסיפו הכול" : "";
+    all.hidden = usual.length < 2;
+    all.addEventListener("click", () => addNames(usual.map((r) => r.name)));
+    rows.push(row("הקבועים", usual.map((r) => chip(r.name, "", () => addNames([r.name]))), all));
+  }
+  el.replaceChildren(...rows);
+}
 
 // ---- Quick add chips: appear while typing (or when the list is empty), built from "our products" ----
 let addFocused = false;
@@ -993,6 +1097,14 @@ $("install-x").addEventListener("click", () => {
   try { localStorage.setItem("installDismissed", "1"); } catch {}
 });
 if (DEMO) $("demo-bar").hidden = false;
+
+// No reception (a basement supermarket): the list keeps working from the phone's copy; say so, and say when it is back.
+if (!DEMO) {
+  const syncOnline = () => { $("offline-bar").hidden = navigator.onLine; };
+  addEventListener("online", syncOnline);
+  addEventListener("offline", syncOnline);
+  syncOnline();
+}
 
 // ---- Tabs that need everything above ----
 regulars = initRegulars({

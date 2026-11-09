@@ -404,3 +404,21 @@ dialog.shop { transform: none; }
 .bar { transition: box-shadow .25s; }
 .bar.scrolled { box-shadow: 0 8px 18px -14px rgba(20, 30, 25, .35); }
 .shop-row.popping.done .shop-mark { animation: box-pop .38s var(--pop), box-ring .55s ease-out; }
+
+
+/* ---------- Suggestion strip on the list ---------- */
+.strip { display: grid; gap: 10px; margin: 0 0 16px; }
+.strip-row { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.strip-label { flex: none; color: var(--mut); font-size: 13px; font-weight: 600; }
+.strip-chips { display: flex; gap: 8px; min-width: 0; flex: 1; overflow-x: auto; padding: 2px 0; scrollbar-width: none; }
+.strip-chips::-webkit-scrollbar { display: none; }
+.strip-row > .link-btn { flex: none; min-height: 36px; font-size: 14px; }
+.chip-wrap { flex: none; display: inline-flex; align-items: center; animation: row-in .34s var(--ease) both; animation-delay: calc(var(--i, 0) * 40ms); }
+.chip-wrap .sugg { display: inline-flex; align-items: center; gap: 8px; }
+.chip-wrap .sugg small { color: var(--mut); font-size: 12px; font-weight: 500; }
+.chip-wrap:has(.chip-x) .sugg { border-start-end-radius: 0; border-end-end-radius: 0; border-inline-end: 0; padding-inline-end: 10px; }
+.chip-x { display: grid; place-items: center; width: 32px; min-height: 38px; border: 1px solid var(--line); border-start-start-radius: 0; border-end-start-radius: 0; border-start-end-radius: 99px; border-end-end-radius: 99px; background: var(--surface); color: var(--mut); transition: transform .16s var(--ease), background .15s, color .15s; }
+.chip-x:hover { background: var(--surface2); color: var(--text); }
+.chip-x:active { transform: scale(.92); }
+.shop-left { max-width: 34ch; font-size: 14.5px; }
+.shop-bar .link-btn { min-height: 36px; padding: 4px 6px; }
