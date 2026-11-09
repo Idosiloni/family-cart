@@ -7,7 +7,7 @@ import { CATEGORIES, DEFAULT_ORDER, categoryById, classify, normalizeOrder, setL
 import { parseItems, splitQty, splitSpoken } from "./parse.js";
 import { icon } from "./icons.js";
 import { clock, shareText } from "./format.js";
-import { toast, reducedMotion } from "./effects.js";
+import { toast, reducedMotion, leaveRow, burst, rollIn, EASE_OUT } from "./effects.js";
 import { attachSwipe } from "./swipe.js";
 import { suggestions } from "./regulars.js";
 import { initRegulars } from "./ui-regulars.js";
@@ -66,6 +66,7 @@ const receiptsRef = collection(db, "carts", cartId, "receipts");
 
 // ---- State ----
 let items = [];
+let loaded = false;   // the first snapshot of the list has arrived
 let order = [...DEFAULT_ORDER];
 let buyStats = {};     // learnKey -> { n: name, c: times added, t: last added, p?: pinned, x?: removed }
 let userPrices = {};   // learnKey -> { [storeId]: unit price the family typed in }
@@ -80,6 +81,7 @@ try { me = localStorage.getItem("me") || ""; } catch {}
 function tileEl(cat, size = 18) {
   const t = document.createElement("span");
   t.className = "tile";
+  t.dataset.cat = cat.id; // the soft section colour comes from CSS
   t.append(icon(cat.icon, size));
   return t;
 }
@@ -88,10 +90,14 @@ document.querySelectorAll("[data-icon-label]").forEach((el) => el.prepend(icon(e
 
 const catOf = (item) => categoryById(item.category || classify(item.name));
 
+// The header gets a faint shadow once the list scrolls under it.
+addEventListener("scroll", () => document.querySelector(".bar").classList.toggle("scrolled", scrollY > 4), { passive: true });
+
 // ---- Tabs ----
 let view = "list";
 let regulars, prices; // set up at the bottom, after everything they need exists
 function setView(v) {
+  const changed = v !== view;
   view = v;
   for (const id of ["list", "regulars", "prices"]) {
     $("view-" + id).hidden = id !== v;
@@ -99,13 +105,34 @@ function setView(v) {
   }
   $("add-form").classList.toggle("hide", v !== "list");
   try { sessionStorage.setItem("view", v); } catch {}
+  placeTabInd();
+  if (changed && !reducedMotion()) $("view-" + v).animate([{ opacity: 0, transform: "translateY(8px)" }, { opacity: 1, transform: "none" }], { duration: 240, easing: EASE_OUT });
   if (v === "regulars") regulars.refresh();
   if (v === "prices") prices.refresh();
   scrollTo(0, 0);
 }
 document.querySelectorAll(".tabs [data-view]").forEach((b) => b.addEventListener("click", () => setView(b.dataset.view)));
 
+// One underline that slides to the selected tab, instead of each tab drawing its own.
+const tabInd = document.createElement("span");
+tabInd.className = "tab-ind";
+tabInd.setAttribute("aria-hidden", "true");
+document.querySelector(".tabs").append(tabInd);
+function placeTabInd() {
+  const b = $("tab-" + view);
+  if (!b.offsetWidth) return;
+  tabInd.style.width = b.offsetWidth * .56 + "px";
+  tabInd.style.transform = `translateX(${b.offsetLeft + b.offsetWidth * .22}px)`;
+}
+placeTabInd();
+requestAnimationFrame(() => tabInd.classList.add("ready")); // no slide on the first placement
+addEventListener("resize", placeTabInd);
+document.fonts?.ready.then(placeTabInd);
+
 // ---- Render ----
+const WHO_COLORS = ["#2F7D5B", "#3B7DC4", "#C77D2E", "#B5527A", "#7A5BC4", "#2E9AA8"];
+const hashName = (n) => [...n].reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7);
+
 function renderItem(item) {
   const li = document.createElement("li");
   li.className = "row" + (item.checked ? " done" : "");
@@ -116,7 +143,20 @@ function renderItem(item) {
   box.id = "c-" + item.id;
   box.checked = item.checked;
   box.setAttribute("aria-label", item.name);
-  box.addEventListener("change", () => toggleItem(item, box.checked));
+  box.addEventListener("change", () => { li.classList.add("popping"); toggleItem(item, box.checked, li); });
+  // New rows ease in (staggered on first load); one added by someone else also flashes briefly.
+  // Other snapshots (settings, history) rebuild the list a moment later, so a row keeps its entrance going:
+  // the negative delay resumes the animation where it was instead of restarting it.
+  const e = enterAt.get(item.id);
+  if (e && !item.checked) {
+    const elapsed = performance.now() - e.t;
+    if (elapsed > 1500) enterAt.delete(item.id);
+    else {
+      li.classList.add("enter");
+      if (e.flash) li.classList.add("flash");
+      li.style.animationDelay = `${e.i * 34 - elapsed}ms`;
+    }
+  }
 
   // Tapping the name opens the editor (quantity, note, price, delete); the circle or a swipe checks it off.
   const text = document.createElement("button");
@@ -133,17 +173,23 @@ function renderItem(item) {
     name.append(q);
   }
   text.append(name);
-  const metaParts = [item.note, item.addedBy].filter(Boolean);
-  if (metaParts.length) {
+  if (item.note || item.addedBy) {
     const meta = document.createElement("span");
     meta.className = "meta";
-    meta.textContent = metaParts.join(" · ");
+    if (item.note) meta.append(item.note + (item.addedBy ? " · " : ""));
+    if (item.addedBy) {
+      // A small dot in the colour of whoever added it, the same colour every time for the same name.
+      const dot = document.createElement("i");
+      dot.className = "who";
+      dot.style.setProperty("--who", WHO_COLORS[hashName(item.addedBy) % WHO_COLORS.length]);
+      meta.append(dot, item.addedBy);
+    }
     text.append(meta);
   }
   text.addEventListener("click", () => openEdit(item));
 
   li.append(box, text);
-  attachSwipe(li, { onRight: () => toggleItem(item, !item.checked), onLeft: () => deleteWithUndo([item], `${item.name} נמחק`) });
+  attachSwipe(li, { onRight: () => { if (!item.checked) { box.checked = true; li.classList.add("popping"); } toggleItem(item, !item.checked, li); }, onLeft: () => deleteWithUndo([item], `${item.name} נמחק`) });
   return li;
 }
 
@@ -168,7 +214,14 @@ function playFlip(first) {
   });
 }
 
+// While a checked-off row is still sliding out, rebuilding the list would cut the motion short, so a render
+// that arrives meanwhile is held back and runs when the row's write lands (its snapshot triggers it).
+const enterAt = new Map(); // item id -> { t: when it appeared, i: stagger slot, flash }: rows still easing in
+let leaving = 0, dirty = false, prevTodoN = 0;
+
 function render() {
+  if (leaving) { dirty = true; return; }
+  dirty = false;
   const first = snapshotRows();
   // Rows are rebuilt on every render; keep a keyboard user's place on the checkbox they just toggled.
   const focusedBox = document.activeElement?.matches?.("li input[type=checkbox]") ? document.activeElement.id : null;
@@ -183,6 +236,7 @@ function render() {
   $("list").replaceChildren(...groups.map((g) => {
     const section = document.createElement("section");
     section.className = "group";
+    section.dataset.cat = g.cat.id;
     const h = document.createElement("button");
     h.type = "button";
     h.className = "group-head";
@@ -194,7 +248,7 @@ function render() {
     const chev = document.createElement("span");
     chev.className = "chev";
     chev.append(icon("chevron", 16));
-    h.append(gname, count, chev);
+    h.append(tileEl(g.cat, 15), gname, count, chev);
     const isCollapsed = collapsed.has(g.cat.id);
     section.classList.toggle("collapsed", isCollapsed);
     h.setAttribute("aria-expanded", String(!isCollapsed));
@@ -219,6 +273,10 @@ function render() {
   $("skeleton").hidden = true;
   $("empty").hidden = items.length > 0;
   $("all-done").hidden = !(items.length > 0 && todo.length === 0);
+  if (loaded && view === "list" && prevTodoN > 0 && todo.length === 0 && items.length > 0) {
+    requestAnimationFrame(() => burst($("all-done").querySelector(".state-mark")));
+  }
+  prevTodoN = todo.length;
   updateSummary(todo.length, done.length);
   renderSuggestions();
   if (focusedBox) document.getElementById(focusedBox)?.focus({ preventScroll: true });
@@ -230,10 +288,15 @@ function render() {
 
 function updateSummary(todoN, doneN) {
   const total = todoN + doneN;
+  const changed = $("big-todo").textContent !== String(todoN);
   $("big-todo").textContent = todoN;
   $("big-todo").hidden = !todoN;
+  if (changed && todoN) rollIn($("big-todo"));
   $("summary").textContent = !total ? "הרשימה ריקה" : todoN ? "נשארו לקחת" : "הכול בעגלה";
   $("meta").textContent = total && todoN && doneN ? `· ${doneN} כבר בעגלה` : "";
+  const bar = $("progress");
+  bar.hidden = !total;
+  bar.style.setProperty("--p", total ? doneN / total : 0);
   $("shop-btn").disabled = !todoN;
   $("send-btn").disabled = !todoN;
 }
@@ -272,10 +335,21 @@ function deleteWithUndo(list, label) {
   toast(label, { label: "ביטול", run: () => restoreItems(keep).catch(() => setStatus("לא הצלחתי לשחזר", true)) });
 }
 
-function toggleItem(item, checked) {
+// Checking a row off: the circle fills, the row slides out, and only then is the change written, so the list
+// is rebuilt once the motion is done. Tapping the circle again mid-slide just cancels it; nothing is written.
+function toggleItem(item, checked, row) {
+  if (row?._leave) { row._leave.cancel(); row._leave = null; return; }
   if (checked) navigator.vibrate?.(14);
-  updateDoc(doc(itemsRef, item.id), { checked })
-    .catch(() => setStatus("לא הצלחתי לעדכן, בדוק חיבור לאינטרנט", true));
+  const write = () => updateDoc(doc(itemsRef, item.id), { checked })
+    .catch(() => { setStatus("לא הצלחתי לעדכן, בדוק חיבור לאינטרנט", true); render(); });
+  if (!checked || !row || reducedMotion()) return write();
+  const anim = leaveRow(row);
+  row._leave = anim;
+  leaving++;
+  anim.finished.then(
+    () => { row._leave = null; leaving--; write(); },
+    () => { leaving--; if (!leaving && dirty) render(); },
+  );
 }
 
 // ---- Shopping mode: one section at a time, in store-walking order ----
@@ -288,6 +362,8 @@ function shopSections() {
     return { cat: categoryById(id), todo: its.filter((i) => !i.checked), done: its.filter((i) => i.checked) };
   }).filter((s) => s.todo.length + s.done.length);
 }
+
+const shopPop = new Map(); // item id -> when it was last ticked in shopping mode, so the rebuilt row can still pop
 
 function shopRow(item) {
   const row = document.createElement("div");
@@ -314,7 +390,8 @@ function shopRow(item) {
     n.textContent = item.note;
     name.append(n);
   }
-  const flip = () => toggleItem(item, !item.checked);
+  if (performance.now() - (shopPop.get(item.id) || -1e9) < 800) row.classList.add("popping");
+  const flip = () => { shopPop.set(item.id, performance.now()); toggleItem(item, !item.checked); };
   let x0 = null, dx = 0;
   row.addEventListener("pointerdown", (e) => { x0 = e.clientX; dx = 0; row.setPointerCapture(e.pointerId); });
   row.addEventListener("pointermove", (e) => {
@@ -381,6 +458,7 @@ function renderShop() {
       if (n > 0) {
         const min = Math.max(1, Math.round((Date.now() - shop.start) / 60000));
         shop.summary = { n, min };
+        shop.celebrate = true;
         if (!DEMO) try {
           const trips = JSON.parse(localStorage.getItem("trips:" + cartId) || "[]");
           shop.prev = trips[0] || null;
@@ -404,6 +482,7 @@ function renderShop() {
     done.addEventListener("click", () => shopDlg.close());
     fin.append(t, p, ...(prevP.textContent ? [prevP] : []), receipt, done);
     body.replaceChildren(fin);
+    if (shop.celebrate) { shop.celebrate = false; requestAnimationFrame(() => burst(t)); }
   } else {
     body.replaceChildren(head, ...sec.todo.map(shopRow), ...sec.done.map(shopRow));
   }
@@ -467,7 +546,16 @@ shopDlg.addEventListener("close", () => { clearTimeout(shop.timer); clearInterva
 document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible" && shopDlg.open) keepAwake(); });
 
 // ---- Live data ----
-let loaded = false;
+// An item that was just added lands in its own section, maybe off-screen: scroll it into view so the add is seen.
+function revealNew(added) {
+  if (view !== "list" || !added.length) return;
+  const li = document.querySelector(`#list li[data-id="${added[0].id}"]`);
+  if (!li) return;
+  const r = li.getBoundingClientRect();
+  const top = document.querySelector(".bar").getBoundingClientRect().bottom, bottom = $("add-form").getBoundingClientRect().top;
+  if (r.top < top + 8 || r.bottom > bottom - 8) li.scrollIntoView({ block: "center", behavior: reducedMotion() ? "auto" : "smooth" });
+}
+
 onSnapshot(
   query(itemsRef, orderBy("createdAt")),
   (snap) => {
@@ -475,14 +563,19 @@ onSnapshot(
     const firstLoad = !loaded;
     items = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
     loaded = true;
+    let fresh = [];
     // Someone else added something while this screen is open: say so.
     if (!firstLoad) {
-      const fresh = items.filter((i) => !known.has(i.id) && i.addedBy && i.addedBy !== me);
+      fresh = items.filter((i) => !known.has(i.id) && i.addedBy && i.addedBy !== me);
       if (fresh.length) toast(fresh.length === 1 ? `${fresh[0].addedBy} הוסיף/ה ${fresh[0].name}` : `${fresh[0].addedBy} הוסיף/ה ${fresh.length} מוצרים`);
     } else {
       showInstallBanner();
     }
+    const freshIds = new Set(fresh.map((i) => i.id));
+    let slot = 0;
+    for (const i of items) if (!known.has(i.id) && !i.checked) enterAt.set(i.id, { t: performance.now(), i: firstLoad ? Math.min(slot++, 10) : 0, flash: !firstLoad });
     render();
+    if (!firstLoad) revealNew(items.filter((i) => !known.has(i.id) && !i.checked));
   },
   (err) => {
     console.error(err);
