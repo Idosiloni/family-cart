@@ -1,6 +1,7 @@
 // The "our products" tab: everything the family has added before, pinned favourites first.
 // One tap adds a product to the list; tapping its name opens pin / section / price / remove.
 import { learnKey, classify, categoryById } from "./categories.js";
+import { matchKey } from "./names.js";
 import { listRegulars, listStarters, missingPinned } from "./regulars.js";
 
 export function initRegulars(ctx) {
@@ -11,7 +12,7 @@ export function initRegulars(ctx) {
   const dialog = $("reg-dialog");
   let open = null; // the product the dialog is about: { key, name, count, pinned }
 
-  const onListKeys = () => new Set(ctx.items.map((i) => learnKey(i.name)));
+  const onListKeys = () => new Set(ctx.items.map((i) => matchKey(i.name)));
   const sectionOf = (name) => categoryById(classify(name));
 
   function row(r, onList) {
@@ -63,7 +64,7 @@ export function initRegulars(ctx) {
     const card = document.createElement("div");
     card.className = "card";
     const ul = document.createElement("ul");
-    ul.append(...rows.map((r) => row(r, onList.has(r.key))));
+    ul.append(...rows.map((r) => row(r, onList.has(matchKey(r.name)))));
     card.append(ul);
     return [head, card];
   }

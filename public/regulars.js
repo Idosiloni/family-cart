@@ -6,6 +6,7 @@
 // g and m let us say how often a product is bought (g / m) and so when it is probably running low.
 // Every product added to the list is counted there, so the database builds itself.
 import { learnKey } from "./categories.js";
+import { matchKey, typedMatches } from "./names.js";
 
 // Shown until the family has a history of its own.
 export const STARTERS = ["חלב", "ביצים", "לחם", "עגבניות", "מלפפונים", "במבה", "קולה", "אורז", "גבינה צהובה", "קוטג'", "שמן", "פסטה"];
@@ -24,19 +25,35 @@ export function listStarters(stats = {}) {
   return STARTERS.filter((n) => !known.has(learnKey(n)));
 }
 
+// `onList` holds the matchKeys of what is on the list (see names.js), so "בננה" on the list also hides the chip "בננות".
+const isOn = (onList, name) => onList.has(matchKey(name));
+
 // Names for the quick-add chips: regulars that are not on the list yet (pinned first), then starters.
-// `onList` is a Set of learnKeys of everything on the list. `typed` narrows the chips while someone is typing.
-export function suggestions(stats, onList, { typed = "", limit = 10 } = {}) {
-  const mine = listRegulars(stats).filter((r) => !onList.has(r.key)).map((r) => r.name);
-  const starters = listStarters(stats).filter((n) => !onList.has(learnKey(n)));
-  const q = typed.trim().toLowerCase();
-  const all = [...mine, ...starters];
-  return (q ? all.filter((n) => n.toLowerCase().includes(q)) : all).slice(0, limit);
+// `onList` is a Set of matchKeys of everything on the list. `typed` narrows the chips while someone is typing.
+export function suggestions(stats, onList, { typed = "", limit = 10, catalog = [] } = {}) {
+  const mine = listRegulars(stats).filter((r) => !isOn(onList, r.name)).map((r) => r.name);
+  const starters = listStarters(stats).filter((n) => !isOn(onList, n));
+  const q = typed.trim();
+  if (!q) return [...mine, ...starters].slice(0, limit);
+  // Typing: the family's own products first, then the common names from `catalog` (display-ready names from the
+  // price list), then the starters. Each word typed must begin a word of the name, so "גבינה צ" finds "גבינה צהובה".
+  const seen = new Set();
+  const out = [];
+  const common = catalog.filter((n) => !isOn(onList, n)).sort((a, b) => a.length - b.length); // the plainest names first
+  for (const n of [...mine, ...common, ...starters]) {
+    const k = matchKey(n);
+    if (seen.has(k) || !typedMatches(q, n)) continue;
+    seen.add(k);
+    out.push(n);
+  }
+  // Names that start with what was typed come before names that only contain it, keeping the order otherwise.
+  const lead = q.toLowerCase();
+  return [...out.filter((n) => n.toLowerCase().startsWith(lead)), ...out.filter((n) => !n.toLowerCase().startsWith(lead))].slice(0, limit);
 }
 
 // Pinned regulars that are not on the list: "add all the usuals" in one tap.
 export function missingPinned(stats, onList) {
-  return listRegulars(stats).filter((r) => r.pinned && !onList.has(r.key));
+  return listRegulars(stats).filter((r) => r.pinned && !isOn(onList, r.name));
 }
 
 // ---- Running low: how often is this bought, and is it overdue? ----
@@ -62,7 +79,7 @@ export function typicalDays(v) {
 export function dueItems(stats, onList, { now = Date.now(), snoozed = {}, limit = 6 } = {}) {
   const out = [];
   for (const [key, v] of Object.entries(stats || {})) {
-    if (!v || typeof v.n !== "string" || !v.n || v.x === true || onList.has(key)) continue;
+    if (!v || typeof v.n !== "string" || !v.n || v.x === true || isOn(onList, v.n)) continue;
     if ((snoozed[key] || 0) > now) continue;
     const every = typicalDays(v);
     if (every === null || every < 2 || every > 60) continue;

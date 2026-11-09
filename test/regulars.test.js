@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { listRegulars, listStarters, suggestions, missingPinned, STARTERS, gapSince, typicalDays, dueItems, agoText } from "../public/regulars.js";
 import { learnKey } from "../public/categories.js";
+import { matchKey } from "../public/names.js";
 
 const stats = {
   [learnKey("חלב")]: { n: "חלב", c: 5, t: 100, p: true },
@@ -27,7 +28,7 @@ test("starters: skip what the family already has or removed, so a removed starte
 });
 
 test("suggestions: own products not on the list come first, then starters, and typing narrows them", () => {
-  const onList = new Set([learnKey("ביצים")]);
+  const onList = new Set([matchKey("ביצים")]);
   const all = suggestions(stats, onList, { limit: 50 });
   assert.deepEqual(all.slice(0, 2), ["חלב", "לחם"]);
   assert.ok(!all.includes("ביצים"));
@@ -37,7 +38,7 @@ test("suggestions: own products not on the list come first, then starters, and t
 
 test("missingPinned: only pinned products that are not on the list yet", () => {
   assert.deepEqual(missingPinned(stats, new Set()).map((r) => r.name), ["חלב"]);
-  assert.deepEqual(missingPinned(stats, new Set([learnKey("חלב")])), []);
+  assert.deepEqual(missingPinned(stats, new Set([matchKey("חלב")])), []);
 });
 
 const DAY = 86400000;
@@ -67,7 +68,7 @@ test("dueItems: overdue regulars that are not on the list, most overdue first", 
     [learnKey("קולה")]: { n: "קולה", c: 9, t: now - 30 * DAY, g: 2 * DAY, m: 2, x: true }, // removed
   };
   assert.deepEqual(dueItems(h, new Set(), { now }).map((d) => d.name), ["ביצים", "חלב"]);
-  assert.deepEqual(dueItems(h, new Set([learnKey("ביצים")]), { now }).map((d) => d.name), ["חלב"]);
+  assert.deepEqual(dueItems(h, new Set([matchKey("ביצים")]), { now }).map((d) => d.name), ["חלב"]);
   assert.deepEqual(dueItems(h, new Set(), { now, snoozed: { [learnKey("ביצים")]: now + DAY } }).map((d) => d.name), ["חלב"]);
   assert.deepEqual(dueItems(h, new Set(), { now, snoozed: { [learnKey("ביצים")]: now - 1 } }).map((d) => d.name), ["ביצים", "חלב"]); // snooze over
   assert.equal(dueItems(h, new Set(), { now, limit: 1 }).length, 1);
@@ -78,4 +79,17 @@ test("agoText", () => {
   assert.equal(agoText(1), "אתמול");
   assert.equal(agoText(9), "לפני 9 ימים");
   assert.equal(agoText(21), "לפני 3 שבועות");
+});
+
+test("suggestions while typing: own products, then common names, each word typed starts a word of the name", () => {
+  const catalog = ["גבינה צהובה פרוסות", "גבינה לבנה 5%", "חלב טרי", "בננות"];
+  const own = { [learnKey("גבינת עיזים")]: { n: "גבינת עיזים", c: 3, t: 1 } };
+  assert.deepEqual(suggestions(own, new Set(), { typed: "גבינ", catalog, limit: 10 }).slice(0, 2), ["גבינת עיזים", "גבינה לבנה 5%"]); // own first, then the plainest catalog names
+  assert.deepEqual(suggestions({}, new Set(), { typed: "גבינה צ", catalog }), ["גבינה צהובה פרוסות", "גבינה צהובה"]); // the catalog name, then the starter
+  assert.ok(suggestions({}, new Set(), { typed: "בננה", catalog }).includes("בננות"));
+  // something already on the list is not suggested again, even under another spelling
+  assert.ok(!suggestions({}, new Set([matchKey("בננה")]), { typed: "בנ", catalog }).includes("בננות"));
+  // no duplicates between own products and the catalog
+  const dup = suggestions({ [learnKey("חלב טרי")]: { n: "חלב טרי", c: 2, t: 1 } }, new Set(), { typed: "חלב", catalog });
+  assert.equal(dup.filter((n) => n === "חלב טרי").length, 1);
 });
