@@ -53,10 +53,9 @@ h1, h2, h3, p { margin: 0; }
 .icon-btn { flex: none; display: grid; place-items: center; width: 44px; height: 44px; border: 0; border-radius: 12px; background: none; color: var(--mut); transition: background .15s, color .15s; }
 .icon-btn:hover { background: var(--surface2); color: var(--text); }
 .icon-btn.small { width: 36px; height: 36px; }
-.tabs { max-width: 640px; margin: 0 auto; display: flex; padding: 0 8px; }
+.tabs { position: relative; max-width: 640px; margin: 0 auto; display: flex; padding: 0 8px; }
 .tabs button { flex: 1; min-height: 44px; border: 0; background: none; color: var(--mut); font-weight: 500; font-size: 15px; position: relative; }
 .tabs button[aria-selected="true"] { color: var(--text); font-weight: 700; }
-.tabs button[aria-selected="true"]::after { content: ""; position: absolute; inset-inline: 22%; bottom: -1px; height: 2px; border-radius: 2px; background: var(--accent); }
 
 main { max-width: 640px; margin: 0 auto; padding: 18px 16px 150px; }
 #status { color: var(--mut); font-size: 14px; margin-bottom: 12px; }
@@ -83,7 +82,7 @@ main { max-width: 640px; margin: 0 auto; padding: 18px 16px 150px; }
 /* ---------- List view ---------- */
 .summary { display: grid; gap: 12px; margin-bottom: 14px; }
 .summary-line { font-size: 17px; font-weight: 600; }
-.summary-line b { font-size: 26px; font-weight: 700; color: var(--accent); margin-inline-end: 2px; }
+.summary-line b { display: inline-block; font-variant-numeric: tabular-nums; font-size: 26px; font-weight: 700; color: var(--accent); margin-inline-end: 2px; }
 .meta-inline { color: var(--mut); font-weight: 400; font-size: 14px; margin-inline-start: 8px; }
 .summary-actions { display: flex; gap: 8px; }
 .summary-actions .btn:not(.icon-only) { flex: 1; }
@@ -96,7 +95,10 @@ main { max-width: 640px; margin: 0 auto; padding: 18px 16px 150px; }
 .group-head .count { margin-inline-start: auto; font-weight: 500; }
 .chev { display: grid; transition: transform .2s var(--ease); }
 .group.collapsed .chev { transform: rotate(90deg); }
-.group.collapsed .card { display: none; }
+.group .card { display: grid; grid-template-rows: 1fr; transition: grid-template-rows .28s var(--ease), opacity .2s, border-color .2s, box-shadow .2s; }
+.group .card > ul { min-height: 0; overflow: hidden; }
+.group.flip .card > ul { overflow: visible; }
+.group.collapsed .card { grid-template-rows: 0fr; opacity: 0; border-color: transparent; box-shadow: none; }
 .card { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; overflow: hidden; box-shadow: var(--shadow); }
 .group.flip .card { overflow: visible; }
 
@@ -309,3 +311,96 @@ dialog.shop::before { display: none; }
 
 .sugg-row.wrap { flex-wrap: wrap; overflow: visible; padding-bottom: 4px; }
 .chain-sub { font-size: 15px; font-weight: 700; margin-top: 16px; }
+
+
+/* ---------- Motion ----------
+   Quiet and quick: transform and opacity only, mostly under 300ms, a little overshoot where something lands.
+   Everything here is switched off for people who ask for reduced motion (see the end of this block). */
+:root { --pop: cubic-bezier(.34, 1.56, .64, 1); }
+
+/* Press feedback: things you can tap shrink a touch under the finger. */
+.btn, .icon-btn, .sugg, .row-btn, .pick, .cart-btn, .tabs button, .menu-list button, .swatch, .price-line, .done-head, .group-head {
+  transition: transform .16s var(--ease), background .15s, color .15s, border-color .15s, filter .15s, opacity .15s;
+}
+.btn:active, .icon-btn:active, .sugg:active, .row-btn:active, .pick:active, .cart-btn:active, .swatch:active, .price-line:active { transform: scale(.96); }
+.tabs button:active, .menu-list button:active, .group-head:active, .done-head:active { transform: scale(.985); }
+
+/* The sliding tab underline (placed by JS). */
+.tab-ind { position: absolute; left: 0; bottom: -1px; height: 2px; border-radius: 2px; background: var(--accent); pointer-events: none; }
+.tab-ind.ready { transition: transform .34s var(--ease), width .34s var(--ease); }
+
+/* New rows ease in; one someone else just added also glows for a moment. */
+li.row.enter { animation: row-in .36s var(--ease) both; }
+li.row.enter.flash { animation: row-in .36s var(--ease) both, row-flash 1.8s ease-out; }
+@keyframes row-in { from { opacity: 0; transform: translateY(10px) scale(.985); } }
+@keyframes row-flash { from { background: color-mix(in srgb, var(--accent) 20%, var(--surface)); } }
+
+/* Checking off: the circle pops with a ring and the tick overshoots into place. */
+li.row input[type=checkbox]::after { transition: transform .26s var(--pop); }
+li.row.popping input[type=checkbox]:checked { animation: box-pop .38s var(--pop), box-ring .55s ease-out; }
+@keyframes box-pop { 0% { transform: scale(.7); } 55% { transform: scale(1.18); } 100% { transform: scale(1); } }
+@keyframes box-ring { from { box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 50%, transparent); } to { box-shadow: 0 0 0 11px transparent; } }
+
+/* Empty and finished states breathe a little. */
+.state-mark { animation: float 3.4s ease-in-out infinite; }
+@keyframes float { 50% { transform: translateY(-5px); } }
+.state h2, .state p { animation: row-in .5s var(--ease) both; }
+.state p { animation-delay: .08s; }
+
+/* Dialogs: a card that rises and fades in (a sheet on phones), with the backdrop fading rather than snapping.
+   Uses @starting-style, so browsers without it simply open instantly as before. */
+dialog { opacity: 0; transform: translateY(14px) scale(.975); transition: opacity .2s var(--ease), transform .28s var(--ease), overlay .28s allow-discrete, display .28s allow-discrete; }
+dialog[open] { opacity: 1; transform: none; }
+@starting-style { dialog[open] { opacity: 0; transform: translateY(14px) scale(.975); } }
+dialog::backdrop { background: rgba(10, 14, 12, 0); transition: background .25s var(--ease), overlay .25s allow-discrete, display .25s allow-discrete; }
+dialog[open]::backdrop { background: rgba(10, 14, 12, .45); }
+@starting-style { dialog[open]::backdrop { background: rgba(10, 14, 12, 0); } }
+dialog.shop { transform: none; }
+@starting-style { dialog.shop[open] { opacity: 0; transform: none; } }
+@media (max-width: 600px) {
+  dialog { transform: translateY(36px); }
+  @starting-style { dialog[open] { opacity: 0; transform: translateY(36px); } }
+  dialog.shop { transform: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  dialog, dialog::backdrop { transition: none !important; }
+  .state-mark { animation: none !important; }
+}
+
+
+/* ---------- A little colour ----------
+   Still one accent. Each supermarket section gets a soft tint on its icon tile, so you can tell the aisles apart at a
+   glance; whoever added an item gets a small dot; the list shows how far along it is. Tints are mixed into the surface,
+   so they stay quiet in light and dark. */
+:root { --cl: .6; --cc: .115; }
+:root[data-mode="dark"] { --cl: .78; --cc: .1; }
+@media (prefers-color-scheme: dark) { :root:not([data-mode="light"]):not([data-mode="dark"]) { --cl: .78; --cc: .1; } }
+[data-cat="produce"]  { --cat: oklch(var(--cl) var(--cc) 150); }
+[data-cat="bakery"]   { --cat: oklch(var(--cl) var(--cc) 75); }
+[data-cat="dairy"]    { --cat: oklch(var(--cl) var(--cc) 240); }
+[data-cat="meat"]     { --cat: oklch(var(--cl) var(--cc) 22); }
+[data-cat="pantry"]   { --cat: oklch(var(--cl) var(--cc) 52); }
+[data-cat="snacks"]   { --cat: oklch(var(--cl) var(--cc) 350); }
+[data-cat="drinks"]   { --cat: oklch(var(--cl) var(--cc) 200); }
+[data-cat="frozen"]   { --cat: oklch(var(--cl) var(--cc) 268); }
+[data-cat="cleaning"] { --cat: oklch(var(--cl) var(--cc) 295); }
+[data-cat="hygiene"]  { --cat: oklch(var(--cl) var(--cc) 322); }
+[data-cat="baby"]     { --cat: oklch(var(--cl) calc(var(--cc) * .8) 8); }
+[data-cat="other"]    { --cat: var(--mut); }
+.tile[data-cat] { background: color-mix(in srgb, var(--cat) 15%, var(--surface)); color: var(--cat); }
+.group-head .tile { width: 26px; height: 26px; border-radius: 8px; }
+.group-head { gap: 10px; }
+
+.progress { height: 4px; border-radius: 4px; background: color-mix(in srgb, var(--accent) 14%, var(--surface2)); overflow: hidden; }
+.progress i { display: block; height: 100%; border-radius: 4px; background: var(--accent); transform: scaleX(var(--p, 0)); transform-origin: right center; transition: transform .6s var(--ease); }
+
+.who { display: inline-block; width: 7px; height: 7px; margin-inline-end: 5px; border-radius: 50%; background: var(--who); vertical-align: 1px; }
+.qty { background: color-mix(in srgb, var(--accent) 13%, var(--surface)); color: color-mix(in srgb, var(--accent) 80%, var(--text)); }
+.group-head .count { color: color-mix(in srgb, var(--accent) 70%, var(--mut)); }
+
+.add-box { transition: border-color .15s, box-shadow .25s var(--ease); }
+.add-box:focus-within { box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 14%, transparent); }
+.bar { transition: box-shadow .25s; }
+.bar.scrolled { box-shadow: 0 8px 18px -14px rgba(20, 30, 25, .35); }
+.shop-row.popping.done .shop-mark { animation: box-pop .38s var(--pop), box-ring .55s ease-out; }
