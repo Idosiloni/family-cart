@@ -69,6 +69,7 @@ const write = {
 };
 const run = (ops) => { ops.forEach(([op, ref, data, opts]) => write[op](ref, data, opts)); notify(ops.map(([, ref]) => ref.path)); };
 
+export const getDoc = async (ref) => snapshot({ kind: "doc", path: ref.path });
 export const setDoc = async (ref, data, opts) => run([["set", ref, data, opts]]);
 export const updateDoc = async (ref, data) => run([["update", ref, data]]);
 export const deleteDoc = async (ref) => run([["delete", ref]]);

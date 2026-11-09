@@ -21,7 +21,11 @@
 <body>
   <header class="bar">
     <div class="bar-in">
-      <h1 class="brand">העגלה המשפחתית</h1>
+      <h1 class="brand">
+        <button id="cart-btn" type="button" class="cart-btn" aria-haspopup="dialog" aria-label="החלפת עגלה">
+          <span id="cart-name">העגלה המשפחתית</span><span data-icon="chevron" data-size="16"></span>
+        </button>
+      </h1>
       <button id="menu-btn" type="button" class="icon-btn" aria-label="תפריט" data-icon="dots"></button>
     </div>
     <nav class="tabs" role="tablist" aria-label="חלקי האפליקציה">
@@ -111,7 +115,7 @@
     <ul class="menu-list">
       <li><button type="button" id="menu-name"><span>השם שלי</span><span id="menu-name-val" class="val"></span></button></li>
       <li><button type="button" id="menu-order"><span>סדר המחלקות בסופר</span></button></li>
-      <li><button type="button" id="menu-connect"><span>חיבור מכשירים ושיתוף קישור</span></button></li>
+      <li><button type="button" id="menu-connect"><span>הזמנה לעגלה (קוד וקישור)</span></button></li>
       <li><button type="button" id="menu-install"><span>הוספה למסך הבית</span></button></li>
     </ul>
     <div class="menu-group">
@@ -161,14 +165,43 @@
   </dialog>
 
   <dialog id="connect-dialog">
-    <h2>חיבור מכשירים</h2>
-    <p class="hint">כל מי שפותח את הקישור הזה רואה ומעדכן את אותה עגלה. שלחו אותו למשפחה.</p>
+    <h2>הזמנה לעגלה</h2>
+    <p class="hint" id="connect-hint">הצטרפות: לסרוק את הברקוד, או להקליד את הקוד ב"העגלות שלי".</p>
+    <div id="invite-code" class="code" dir="ltr" hidden></div>
+    <p id="invite-exp" class="hint-line" hidden></p>
     <div id="qr" class="qr" hidden></div>
     <div class="stack">
       <a id="wa" class="btn" target="_blank" rel="noopener">שליחה בוואטסאפ</a>
       <button type="button" class="btn ghost" id="copy-link">העתקת קישור</button>
+      <button type="button" class="link-btn" id="copy-perm" hidden>העתקת קישור קבוע (לא פג תוקף)</button>
       <button type="button" class="link-btn" data-close>סגור</button>
     </div>
+  </dialog>
+
+  <dialog id="carts-dialog" aria-labelledby="carts-title">
+    <h2 id="carts-title">העגלות שלי</h2>
+    <p class="hint">כל עגלה היא רשימה נפרדת, למשל הבית או ההורים. אפשר לעבור בין העגלות בלחיצה.</p>
+    <ul id="carts-list" class="carts-list"></ul>
+    <form id="join-form" class="inline-form" autocomplete="off">
+      <input id="join-input" type="text" dir="ltr" maxlength="14" autocapitalize="characters" autocorrect="off" spellcheck="false" placeholder="KFRT-4829" aria-label="קוד הצטרפות לעגלה">
+      <button type="submit" class="btn small ghost">הצטרפות</button>
+    </form>
+    <p id="join-msg" class="hint-line" role="status"></p>
+    <div class="dialog-actions">
+      <button type="button" class="link-btn" id="cart-new">עגלה חדשה</button>
+      <button type="button" class="btn small" data-close>סיום</button>
+    </div>
+  </dialog>
+
+  <dialog id="cartname-dialog" aria-labelledby="cartname-title">
+    <h2 id="cartname-title">שם העגלה</h2>
+    <form id="cartname-form" autocomplete="off">
+      <label class="field"><input id="cartname-input" type="text" maxlength="30" placeholder="למשל: הבית, ההורים" aria-label="שם העגלה" required></label>
+      <div class="dialog-actions">
+        <button type="button" class="link-btn" data-close>ביטול</button>
+        <button type="submit" class="btn small">שמירה</button>
+      </div>
+    </form>
   </dialog>
 
   <dialog id="install-dialog">

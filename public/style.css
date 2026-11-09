@@ -45,7 +45,11 @@ h1, h2, h3, p { margin: 0; }
 /* ---------- Header + tabs ---------- */
 .bar { position: sticky; top: 0; z-index: 20; background: var(--bg); border-bottom: 1px solid var(--line); padding-top: env(safe-area-inset-top); }
 .bar-in { max-width: 640px; margin: 0 auto; display: flex; align-items: center; justify-content: space-between; height: 54px; padding: 0 16px; }
-.brand { font-size: 18px; font-weight: 700; letter-spacing: -.01em; }
+.brand { font-size: 18px; font-weight: 700; letter-spacing: -.01em; min-width: 0; }
+.cart-btn { display: inline-flex; align-items: center; gap: 4px; max-width: calc(100vw - 96px); min-height: 44px; padding: 0 10px; margin-inline-start: -10px; border: 0; border-radius: 12px; background: none; color: inherit; font: inherit; letter-spacing: inherit; }
+.cart-btn:hover { background: var(--surface2); }
+.cart-btn > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cart-btn > span:last-child { display: grid; color: var(--mut); flex: none; }
 .icon-btn { flex: none; display: grid; place-items: center; width: 44px; height: 44px; border: 0; border-radius: 12px; background: none; color: var(--mut); transition: background .15s, color .15s; }
 .icon-btn:hover { background: var(--surface2); color: var(--text); }
 .icon-btn.small { width: 36px; height: 36px; }
@@ -204,6 +208,14 @@ dialog h2 { font-size: 21px; font-weight: 700; margin-bottom: 4px; }
 .stack { display: grid; gap: 8px; margin-top: 6px; }
 .qr { display: grid; place-items: center; margin: 12px auto; padding: 12px; border-radius: 14px; background: #fff; width: fit-content; }
 .qr svg { width: 180px; height: 180px; }
+.code { text-align: center; font-size: 34px; font-weight: 700; letter-spacing: .08em; font-variant-numeric: tabular-nums; font-family: ui-monospace, "SF Mono", Menlo, monospace; padding: 10px 0 2px; user-select: all; }
+#invite-exp { text-align: center; margin-bottom: 0; }
+.carts-list { display: grid; gap: 8px; margin: 8px 0 14px; }
+.carts-list li { display: flex; align-items: center; gap: 4px; }
+.cart-row { flex: 1; min-width: 0; }
+.cart-row .val { display: inline-flex; align-items: center; gap: 4px; color: var(--accent); font-weight: 600; }
+.cart-row[aria-current="true"] { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 10%, var(--surface)); }
+.cart-row > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .steps { display: grid; gap: 10px; margin: 8px 0; counter-reset: s; }
 .steps li { counter-increment: s; display: flex; gap: 12px; align-items: flex-start; padding: 10px 12px; border-radius: 12px; background: var(--surface2); font-size: 15px; }
 .steps li::before { content: counter(s); flex: none; display: grid; place-items: center; width: 24px; height: 24px; border-radius: 50%; background: var(--accent); color: var(--on-accent); font-size: 13px; font-weight: 700; }
