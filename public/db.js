@@ -20,4 +20,16 @@ export const {
   onSnapshot, query, orderBy, writeBatch, increment, deleteField,
 } = fs;
 
-export const db = DEMO ? fs.getFirestore() : fs.getFirestore(app.initializeApp(firebaseConfig));
+// Real Firestore keeps a copy of the cart on the phone (IndexedDB), so the list opens and can be changed with no
+// reception in the shop; edits are sent when the connection returns. If the browser refuses the local store
+// (private mode, no storage), fall back to the plain online-only database.
+function openDb() {
+  const a = app.initializeApp(firebaseConfig);
+  try {
+    return fs.initializeFirestore(a, { localCache: fs.persistentLocalCache({ tabManager: fs.persistentMultipleTabManager() }) });
+  } catch (e) {
+    console.warn("Offline cache unavailable:", e?.message || e);
+    return fs.getFirestore(a);
+  }
+}
+export const db = DEMO ? fs.getFirestore() : openDb();

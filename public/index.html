@@ -37,7 +37,8 @@
 
   <main>
     <p id="status" role="status"></p>
-    <p id="demo-bar" class="note-bar" hidden><span>מצב הדגמה, שום דבר לא נשמר.</span> <a href="./">לעגלה שלכם</a></p>
+    <p id="offline-bar" class="note-bar" role="status" hidden><span>אין חיבור כרגע. אפשר להמשיך, והשינויים יישלחו כשהחיבור יחזור.</span></p>
+        <p id="demo-bar" class="note-bar" hidden><span>מצב הדגמה, שום דבר לא נשמר.</span> <a href="./">לעגלה שלכם</a></p>
     <div id="install-banner" class="note-bar" hidden>
       <span>הוסיפו את העגלה למסך הבית</span>
       <button type="button" id="install-go" class="link-btn">איך?</button>
@@ -55,6 +56,8 @@
         </div>
       </div>
       <button id="price-line" type="button" class="price-line" hidden></button>
+
+      <div id="suggest-strip" class="strip" hidden></div>
 
       <div id="skeleton" class="skeleton" aria-hidden="true"><i></i><i></i><i></i></div>
 
@@ -137,6 +140,7 @@
         <button id="shop-close" type="button" class="icon-btn" aria-label="סגור" data-icon="close"></button>
         <h2 id="shop-title">מצב קניות</h2>
         <span id="shop-time" class="shop-time" aria-hidden="true"></span>
+        <button id="shop-finish" type="button" class="link-btn">סיום</button>
         <span id="shop-pos" class="shop-pos"></span>
       </header>
       <div id="shop-dots" class="shop-dots"></div>

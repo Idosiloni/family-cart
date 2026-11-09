@@ -108,6 +108,11 @@ store.set("carts/demo/settings/history", { items: Object.fromEntries([
   ["חלב 3%", 14, true], ["ביצים", 12, true], ["לחם מלא", 11, true], ["עגבניות שרי", 9], ["מלפפונים", 9], ["במבה", 8],
   ["קולה זירו", 7], ["חזה עוף", 6], ["אורז בסמטי", 5], ["גבינה צהובה", 5], ["פסטה", 4], ["שמן זית", 3], ["אבקת כביסה", 2],
 ].map(([n, c, p], i) => [learnKey(n), { n, c, t: t0 - i * 3600000, ...(p ? { p: true } : {}) }])) });
+// Two things the family buys about weekly and has not bought for a while, so the "maybe missing" strip has something to show.
+store.set("carts/demo/settings/history", { items: { ...store.get("carts/demo/settings/history").items,
+  [learnKey("יוגורט")]: { n: "יוגורט", c: 8, t: now - 11 * 86400000, g: 7 * 7 * 86400000, m: 7 },
+  [learnKey("נייר טואלט")]: { n: "נייר טואלט", c: 5, t: now - 26 * 86400000, g: 4 * 14 * 86400000, m: 4 },
+} });
 
 // Receipts from earlier trips, so the prices tab has something to compare.
 [["shufersal", 412.5, 31, 21], ["carrefour", 389, 28, 14], ["rami-levy", 361.9, 29, 8], ["shufersal", 398.2, 27, 3], ["carrefour", 402.4, 30, 0]]
