@@ -424,7 +424,7 @@ function renderShop() {
   const ending = !remaining || shop.ended; // everything is in the cart, or the person pressed "finish" with some left
   const focusedKey = document.activeElement?.closest?.("#shop-body .shop-row") ? [...document.querySelectorAll("#shop-body .shop-row")].indexOf(document.activeElement) : -1;
 
-  $("shop-finish").hidden = ending;
+  if ($("shop-finish")) $("shop-finish").hidden = ending;
   $("shop-pos").textContent = !ending ? `${shop.idx + 1} מתוך ${secs.length}` : "";
   $("shop-dots").replaceChildren(...secs.map((s, i) => {
     const b = document.createElement("button");
@@ -559,7 +559,7 @@ $("send-btn").addEventListener("click", async () => {
   window.open("https://wa.me/?text=" + encodeURIComponent(text), "_blank", "noopener");
 });
 $("shop-close").addEventListener("click", () => shopDlg.close());
-$("shop-finish").addEventListener("click", () => { clearTimeout(shop.timer); shop.ended = true; renderShop(); });
+$("shop-finish")?.addEventListener("click", () => { clearTimeout(shop.timer); shop.ended = true; renderShop(); });
 $("shop-prev").addEventListener("click", () => { clearTimeout(shop.timer); shop.dir = -1; shop.idx--; renderShop(); });
 $("shop-next").addEventListener("click", () => { clearTimeout(shop.timer); shop.dir = 1; shop.idx++; renderShop(); });
 shopDlg.addEventListener("close", () => { clearTimeout(shop.timer); clearInterval(shop.tick); shop.wake?.release?.().catch(() => {}); shop.wake = null; });
@@ -808,6 +808,7 @@ function readSnoozed() {
 let stripSig = "";
 function renderStrip() {
   const el = $("suggest-strip");
+  if (!el) return; // an older cached index.html paired with this script
   const onList = new Set(items.map((i) => learnKey(i.name)));
   const due = loaded ? dueItems(buyStats, onList, { snoozed: readSnoozed() }) : [];
   const dueKeys = new Set(due.map((d) => d.key));
@@ -1100,7 +1101,7 @@ if (DEMO) $("demo-bar").hidden = false;
 
 // No reception (a basement supermarket): the list keeps working from the phone's copy; say so, and say when it is back.
 if (!DEMO) {
-  const syncOnline = () => { $("offline-bar").hidden = navigator.onLine; };
+  const syncOnline = () => { const bar = $("offline-bar"); if (bar) bar.hidden = navigator.onLine; };
   addEventListener("online", syncOnline);
   addEventListener("offline", syncOnline);
   syncOnline();
