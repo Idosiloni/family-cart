@@ -294,9 +294,8 @@ function updateSummary(todoN, doneN) {
   if (changed && todoN) rollIn($("big-todo"));
   $("summary").textContent = !total ? "הרשימה ריקה" : todoN ? "נשארו לקחת" : "הכול בעגלה";
   $("meta").textContent = total && todoN && doneN ? `· ${doneN} כבר בעגלה` : "";
-  const bar = $("progress");
-  bar.hidden = !total;
-  bar.style.setProperty("--p", total ? doneN / total : 0);
+  const bar = $("progress"); // absent if an older cached index.html is paired with this script
+  if (bar) { bar.hidden = !total; bar.style.setProperty("--p", total ? doneN / total : 0); }
   $("shop-btn").disabled = !todoN;
   $("send-btn").disabled = !todoN;
 }
