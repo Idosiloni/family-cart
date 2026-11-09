@@ -1055,6 +1055,17 @@ $("menu-order").addEventListener("click", fromMenu(() => { renderOrderDialog(); 
 $("menu-connect").addEventListener("click", fromMenu(() => carts.openInvite()));
 $("menu-install").addEventListener("click", fromMenu(showInstall));
 
+// Tell someone about the app WITHOUT giving them this cart: the plain address, no "#<cart id>" on the end
+// (the address bar carries the cart, so copying it from the browser would put them in this cart). They get a cart of their own.
+// Looked up defensively: an older cached index.html does not have this button.
+async function shareApp() {
+  const url = location.origin + location.pathname;
+  const text = "העגלה המשפחתית: רשימת קניות משותפת שמסתדרת לפי המחלקות בסופר";
+  if (navigator.share) { try { await navigator.share({ title: "העגלה המשפחתית", text, url }); } catch {} return; }
+  window.open("https://wa.me/?text=" + encodeURIComponent(text + "\n" + url), "_blank", "noopener");
+}
+$("menu-share")?.addEventListener("click", fromMenu(shareApp));
+
 // Appearance: auto (follow the phone), light, dark. Stored per device.
 const modeButtons = [...document.querySelectorAll(".seg [data-mode]")];
 function syncMode() {
