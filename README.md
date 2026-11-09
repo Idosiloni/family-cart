@@ -30,6 +30,7 @@ Family WhatsApp groups are where shopping lists go to die: items get buried, bou
 - **Your store's order.** Move sections up or down to match how you walk your supermarket; the whole family sees the same order.
 - **Shopping mode.** One section at a time, in walking order, with a progress strip, a trip timer, a screen that stays awake, and a summary at the end that compares with your last trip.
 - **Fast input.** Type several items at once, paste a whole WhatsApp-style list, or dictate by voice. Quantities (`חלב x3`) and notes are parsed out.
+- **Names that behave.** Same product, different spelling (בננה / בננות, ביצה / ביצים, קוטג' / קוטג׳) is recognised, so it isn't added twice (the app says which item it matched and offers *add anyway*), and it isn't suggested again. "שלוש בננות", "שתי חלב", "פיתות (6)" and "עוד חלב" are read as a quantity or a filler word; "חלב 3" stays a fat percentage, never a count. While typing, suggestions come from the family's own products first, then ~250 everyday names, then the price list. A one-letter typo in a long word ("עגבנוית") still finds its section.
 - **Undo and swipe.** Tap the circle or swipe right to check an item off, swipe left to delete, tap the name to edit. Deleting can be undone from a toast.
 - **Share the list.** Send what's left, grouped by section, to WhatsApp or the system share sheet.
 - **Home screen.** To put the app on a phone's home screen: on iPhone open the cart in Safari (not inside WhatsApp), tap the share button, then *Add to Home Screen*; on Android open it in Chrome, tap the three dots, then *Install app* / *Add to home screen*. The same steps are in the app under the settings menu. A one-time banner and a settings entry walk each family member through "Add to home screen" (iOS and Android). The icon opens the exact cart: the manifest is built at runtime with the cart link as its start URL, and a small network-first service worker (never cache-first, so deploys are picked up at once) is registered. Install prompts depend on the browser; not yet verified on a real phone.
@@ -126,6 +127,8 @@ public/
   categories.js     supermarket sections and the classifier
   catalog*.js       product and brand dictionaries (Israeli market)
   parse.js          item, quantity and spoken-list parsing
+  names.js          pure: "same product?" key, typed-prefix matching, number words, filler words
+  common-names.js   ~250 everyday product names by section (autocomplete; also a classifier check)
   format.js         pure text helpers: share text, timer
   effects.js        toast and reduced-motion helper
   swipe.js          swipe-to-check / swipe-to-delete gesture

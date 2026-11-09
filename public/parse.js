@@ -1,4 +1,5 @@
 import { classify, isKnownWord, phraseLengthAt } from "./categories.js";
+import { numberWordsToDigits, stripFiller, isNumberWord } from "./names.js";
 
 const MAX_ITEMS = 40;
 const MAX_NAME = 80;
@@ -57,12 +58,15 @@ function cleanPiece(p) {
     .replace(/^\s*(?:[-–—*•·▪●○□☐✅☑✔]+️?|\[[ xX]?\]|\d+[.)])\s*/u, "") // list markers
     .replace(/[.!؟?]+$/u, "")
     .replace(/\s+/g, " ")
-    .trim();
+    .trim()
+    .replace(/^.*$/u, stripFiller); // "עוד חלב", "לא לשכוח ביצים" -> the product alone
 }
 
 // "3 חלב" / "חלב x3" -> { name: "חלב", qty: 3 }. Leaves "חלב 3%" and "2 ליטר מים" alone.
-const UNIT = /^(ליטר|ליטרים|קילו|ק"ג|קג|גרם|גר|מ"ל|מל|יח|יחידות)/;
+// A unit must be a whole word: "גר" is grams but also the start of גרביים and גרנולה, "מל" is ml but also מלפפונים.
+const UNIT = /^(?:ליטר|ליטרים|קילו|ק"ג|קג|גרם|גר|מ"ל|מל|יח|יחידות)(?![\p{L}])/u;
 export function splitQty(text) {
+  text = numberWordsToDigits(text); // "שלוש בננות" -> "3 בננות"
   const lead = text.match(/^(\d{1,2})(?:\s*[-–]\s*\d{1,2})?\s+(.+)$/);
   if (lead && !UNIT.test(lead[2]) && !lead[2].startsWith("%")) {
     const qty = Number(lead[1]);
@@ -70,6 +74,10 @@ export function splitQty(text) {
   }
   const trail = text.match(/^(.+?)\s*[x×]\s*(\d{1,2})$/i);
   if (trail && Number(trail[2]) >= 1) return { name: trail[1].trim(), qty: Number(trail[2]) };
+  // "פיתות (6)": a number alone in parentheses. A bare trailing number ("חלב 3", "קוטג' 5") is left alone on purpose:
+  // in Israeli dairy it is the fat percentage, not a count.
+  const paren = text.match(/^(.+?)\s*\((\d{1,2})\)$/);
+  if (paren && Number(paren[2]) >= 1) return { name: paren[1].trim(), qty: Number(paren[2]) };
   return { name: text, qty: 1 };
 }
 
@@ -87,10 +95,10 @@ export function splitSpoken(text) {
 
   for (let i = 0; i < tokens.length; i++) {
     const t = tokens[i];
-    if (/^\d+$/.test(t)) { flush(); cur = [t]; continue; }     // a number opens the next item ("2 חלב")
+    if (/^\d+$/.test(t) || (isNumberWord(t) && i < tokens.length - 1)) { flush(); cur = [t]; continue; } // a number (or "שתי", "שלוש") opens the next item
     const n = phraseLengthAt(tokens, i) || (isKnownWord(t) ? 1 : 0);
     if (n) {
-      if (cur.length && !(cur.length === 1 && /^\d+$/.test(cur[0]))) flush();
+      if (cur.length && !(cur.length === 1 && (/^\d+$/.test(cur[0]) || isNumberWord(cur[0])))) flush();
       cur.push(...tokens.slice(i, i + n));
       i += n - 1;
     } else {

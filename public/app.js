@@ -5,6 +5,8 @@ import {
 import { firebaseConfig } from "./firebase-config.js";
 import { CATEGORIES, DEFAULT_ORDER, categoryById, classify, normalizeOrder, setLearned, rememberLocally, learnKey } from "./categories.js";
 import { parseItems, splitQty, splitSpoken } from "./parse.js";
+import { matchKey, sameProduct } from "./names.js";
+import { COMMON_NAMES } from "./common-names.js";
 import { icon } from "./icons.js";
 import { clock, shareText } from "./format.js";
 import { toast, reducedMotion, leaveRow, burst, rollIn, EASE_OUT } from "./effects.js";
@@ -726,7 +728,7 @@ document.querySelectorAll("dialog").forEach((d) => {
 // ---- Actions ----
 const addInput = $("add-input");
 const autoGrow = () => { addInput.style.height = "auto"; addInput.style.height = Math.min(addInput.scrollHeight + 2, 160) + "px"; };
-addInput.addEventListener("input", () => { autoGrow(); renderSuggestions(); });
+addInput.addEventListener("input", () => { autoGrow(); loadCatalog(); renderSuggestions(); });
 // Desktop: Enter sends, Shift+Enter = new line. Touch: Enter = new line, the + button sends.
 const isTouch = matchMedia("(pointer: coarse)").matches;
 addInput.addEventListener("keydown", (e) => {
@@ -744,13 +746,23 @@ function flash(text) {
 }
 
 // Adds product names (already split). Skips what is already waiting; remembers counts for "our products".
-async function addNames(rawNames, restoreText = "") {
-  const parsed = rawNames.map(splitQty).filter((p) => p.name.length >= 2);
+async function addNames(rawNames, restoreText = "", { force = false } = {}) {
+  const parsed = rawNames.map((raw) => ({ ...splitQty(raw), raw })).filter((p) => p.name.length >= 2);
   if (!parsed.length) return;
 
-  const waiting = new Set(items.filter((i) => !i.checked).map((i) => i.name.trim().toLowerCase()));
-  const fresh = parsed.filter((p) => !waiting.has(p.name.toLowerCase()));
-  if (!fresh.length) return flash("כבר יש את זה ברשימה");
+  // The same product under another spelling ("בננה" when "בננות" is waiting) is not added twice. When something is
+  // held back we say which item it matched and let the person add it anyway.
+  const waiting = items.filter((i) => !i.checked);
+  const fresh = [], dupes = [];
+  for (const p of parsed) {
+    const hit = force ? null : waiting.find((i) => sameProduct(i.name, p.name)) || fresh.find((f) => sameProduct(f.name, p.name));
+    if (hit) dupes.push({ p, on: hit.name }); else fresh.push(p);
+  }
+  if (!fresh.length) {
+    const names = [...new Set(dupes.map((d) => d.on))];
+    toast(`כבר ברשימה: ${names.slice(0, 2).join(", ")}${names.length > 2 ? " ועוד" : ""}`, { label: "הוספה בכל זאת", run: () => addNames(dupes.map((d) => d.p.raw), "", { force: true }) });
+    return;
+  }
 
   setStatus("");
   try {
@@ -809,7 +821,7 @@ let stripSig = "";
 function renderStrip() {
   const el = $("suggest-strip");
   if (!el) return; // an older cached index.html paired with this script
-  const onList = new Set(items.map((i) => learnKey(i.name)));
+  const onList = new Set(items.map((i) => matchKey(i.name)));
   const due = loaded ? dueItems(buyStats, onList, { snoozed: readSnoozed() }) : [];
   const dueKeys = new Set(due.map((d) => d.key));
   const usual = loaded ? missingPinned(buyStats, onList).filter((r) => !dueKeys.has(r.key)).slice(0, 8) : [];
@@ -876,13 +888,35 @@ function renderStrip() {
 }
 
 // ---- Quick add chips: appear while typing (or when the list is empty), built from "our products" ----
+// Common product names for autocomplete: a built-in list of everyday names (common-names.js) plus the names and aliases in the
+// price list, loaded the first time the input is used. The family's own products always come first.
+let catalogNames = [...COMMON_NAMES], catalogAsked = false; // everyday names first; the price list adds more
+function loadCatalog() {
+  if (catalogAsked) return;
+  catalogAsked = true;
+  fetch("prices.json").then((r) => r.json()).then((d) => {
+    const seen = new Set(catalogNames.map(matchKey));
+    for (const p of d.products || []) {
+      for (const n of [p.name, ...(p.aliases || [])]) {
+        const k = typeof n === "string" ? matchKey(n) : "";
+        if (!k || seen.has(k) || n.length > 40) continue;
+        // Keep the generic names ("רסק עגבניות", "קוטג׳ 5%"), not brand-specific ones ("רוטב עגבניות מוטי רומא"): more than two
+        // words besides numbers is a brand or a pack, and would clutter the chips.
+        if (n.split(/\s+/).filter((w) => !/^[\d.,]+%?$/.test(w)).length > 2) continue;
+        seen.add(k);
+        catalogNames.push(n);
+      }
+    }
+    renderSuggestions();
+  }).catch(() => { catalogAsked = false; });
+}
 let addFocused = false;
-addInput.addEventListener("focus", () => { addFocused = true; renderSuggestions(); });
+addInput.addEventListener("focus", () => { addFocused = true; loadCatalog(); renderSuggestions(); });
 addInput.addEventListener("blur", () => setTimeout(() => { addFocused = false; renderSuggestions(); }, 150));
 function renderSuggestions() {
   const row = $("sugg-row");
-  const onList = new Set(items.map((i) => learnKey(i.name)));
-  const names = suggestions(buyStats, onList, { typed: addInput.value, limit: 10 });
+  const onList = new Set(items.map((i) => matchKey(i.name)));
+  const names = suggestions(buyStats, onList, { typed: addInput.value, limit: 10, catalog: catalogNames });
   const show = names.length > 0 && (addFocused || addInput.value.trim() || (loaded && items.length === 0));
   row.hidden = !show;
   if (!show) { row.replaceChildren(); return; }

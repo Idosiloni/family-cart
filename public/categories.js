@@ -89,8 +89,15 @@ const rule = (kw, id, order, brand) =>
   ({ kw: kw.toLowerCase(), len: kw.length, w: brand ? 1 : kw.length, id, order, phrase: kw.includes(" ") });
 // Hebrew plural of a feminine noun: בטטה → בטטות (a word-start match can't see it), so add it.
 const pluralOf = (kw) => (!kw.includes(" ") && kw.length >= 4 && kw.endsWith("ה") ? kw.slice(0, -1) + "ות" : null);
+// ...and the other way: a keyword written in the plural (בננות, ביצים) must also catch the singular (בננה, ביצה).
+const singularsOf = (kw) => {
+  if (kw.includes(" ") || kw.length < 5) return [];
+  if (kw.endsWith("ות")) return [kw.slice(0, -2) + "ה"];             // בננות -> בננה
+  if (kw.endsWith("ים")) return [kw.slice(0, -2), kw.slice(0, -2) + "ה"]; // מלפפונים -> מלפפון, ביצים -> ביצה
+  return [];
+};
 const productRules = (c, order) =>
-  c.keywords.flatMap((kw) => [kw, pluralOf(kw)].filter(Boolean).map((k) => rule(k, c.id, order, false)));
+  c.keywords.flatMap((kw) => [kw, pluralOf(kw), ...singularsOf(kw)].filter(Boolean).map((k) => rule(k, c.id, order, false)));
 const RULES = [
   ...CATEGORIES.flatMap((c, order) => productRules(c, order)),
   ...CATEGORIES.flatMap((c, order) => (BRANDS[c.id] || []).map((kw) => rule(kw, c.id, order, true))),
@@ -114,7 +121,32 @@ export function classify(name) {
     else hit = words.some((w) => w.startsWith(r.kw));
     if (hit && (!best || r.w > best.w || (r.w === best.w && r.order < best.order))) best = r;
   }
-  return best ? best.id : "other";
+  return best ? best.id : typoFallback(words);
+}
+
+// A typo in a long word ("עגבנוית", "מלפפונימ") should not make the product "other". Only for words of 6+ letters, only
+// against keywords of 6+ letters, only one slip away (a wrong, missing, extra or swapped letter), and only when every
+// close keyword is in the same section; otherwise it stays "other" and the family corrects it once.
+function within1(a, b) {
+  if (Math.abs(a.length - b.length) > 1) return false;
+  if (a === b) return true;
+  let i = 0;
+  while (i < a.length && i < b.length && a[i] === b[i]) i++;
+  const A = a.slice(i), B = b.slice(i);
+  if (A.length === B.length) return A.slice(1) === B.slice(1) || (A[0] === B[1] && A[1] === B[0] && A.slice(2) === B.slice(2));
+  const [long, short] = A.length > B.length ? [A, B] : [B, A];
+  return long.slice(1) === short;
+}
+const FUZZY_RULES = RULES.filter((r) => !r.phrase && r.len >= 6 && r.w === r.len); // product keywords, not brands
+function typoFallback(words) {
+  const hits = new Set();
+  for (const w of words) {
+    if (w.length < 6) continue;
+    for (const r of FUZZY_RULES) {
+      for (const n of [r.len - 1, r.len, r.len + 1]) if (n >= 6 && within1(w.slice(0, n), r.kw)) { hits.add(r.id); break; }
+    }
+  }
+  return hits.size === 1 ? [...hits][0] : "other";
 }
 
 // Helpers for splitting a spoken sentence ("חלב ביצים שמן זית") into products.

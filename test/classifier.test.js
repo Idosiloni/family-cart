@@ -55,3 +55,31 @@ test("a family correction overrides the built-in classification", () => {
 test("learnKey ignores whitespace, quantities and percentages", () => {
   assert.equal(learnKey("  חלב  3% "), learnKey("חלב"));
 });
+
+test("pinned: everyday items across the sections", () => {
+  const cases = {
+    "תפוחי אדמה": "produce", "בצל ירוק": "produce", "אבוקדו": "produce", "גזר": "produce", "בננות": "produce",
+    "גבינת שמנת": "dairy", "יוגורט": "dairy", "קוטג'": "dairy", "חמאה": "dairy",
+    "חומוס": "deli", "טחינה": "canned", "פסטה": "pantry", "אורז": "pantry", "קורנפלקס": "pantry",
+    "סבון כלים": "cleaning", "שמפו": "hygiene", "חיתולים": "baby", "גלידה": "frozen", "קפה נמס": "coffee",
+  };
+  for (const [name, id] of Object.entries(cases)) assert.equal(classify(name), id, name);
+});
+
+test("a plural keyword also catches the singular (בננה, ביצה, מלפפון)", () => {
+  assert.equal(classify("בננה"), "produce");
+  assert.equal(classify("ביצה"), "dairy");
+  assert.equal(classify("עגבנייה"), "produce");
+  assert.equal(classify("מלפפון"), "produce");
+  assert.equal(classify("פיתה"), "bakery");
+});
+
+test("one-letter typos in long words still find the section; short or unrelated words stay 'other'", () => {
+  assert.equal(classify("עגבנוית"), "produce");   // swapped letters
+  assert.equal(classify("מלפפונימ"), "produce");  // wrong letter
+  assert.equal(classify("אבוקדדו"), "produce");   // extra letter
+  assert.equal(classify("שוקולדד"), "snacks");
+  assert.equal(classify("בנה"), "other");         // too short to guess
+  assert.equal(classify("qwertyxyz"), "other");
+  assert.equal(classify("קרמבולה פינוק"), "other"); // nothing close
+});
