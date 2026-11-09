@@ -12,6 +12,8 @@ import { attachSwipe } from "./swipe.js";
 import { suggestions } from "./regulars.js";
 import { initRegulars } from "./ui-regulars.js";
 import { initPrices } from "./ui-prices.js";
+import { startCart } from "./cart-boot.js";
+import { initCarts } from "./ui-carts.js";
 
 const $ = (id) => document.getElementById(id);
 const statusEl = $("status");
@@ -21,32 +23,17 @@ function setStatus(text, isError = false) {
   statusEl.classList.toggle("error", isError);
 }
 
-// ---- Cart id: the shared link. Long random id in the URL hash. ----
-function newCartId() {
-  const bytes = crypto.getRandomValues(new Uint8Array(16));
-  return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
-}
-
-function getCartId() {
-  if (DEMO) return "demo"; // never touch the saved cart id or the URL
-  let id = location.hash.slice(1);
-  if (!/^[a-f0-9]{32}$/.test(id)) {
-    let saved = null;
-    try { saved = localStorage.getItem("cartId"); } catch {}
-    id = /^[a-f0-9]{32}$/.test(saved || "") ? saved : newCartId();
-    history.replaceState(null, "", "#" + id);
-  }
-  try { localStorage.setItem("cartId", id); } catch {}
-  return id;
-}
-
 // ---- Setup check ----
 if (!firebaseConfig.projectId) {
   setStatus("חסר חיבור ל-Firebase: מלא את firebase-config.js (ראה README).", true);
   throw new Error("firebase-config.js is not filled in");
 }
 
-const cartId = getCartId();
+// Which cart this page is (cart-boot.js): the link's hash, a join code, or the one used last. May ask the database
+// to resolve a join code, so it is awaited before anything is read.
+const boot = await startCart();
+const cartId = boot.id;
+if (!DEMO) addEventListener("hashchange", () => location.reload()); // a different cart link was opened in this window
 
 // ---- Installable app: the manifest is built at runtime so the home-screen icon opens THIS cart ----
 (function setupManifest() {
@@ -395,10 +382,10 @@ function renderShop() {
         const min = Math.max(1, Math.round((Date.now() - shop.start) / 60000));
         shop.summary = { n, min };
         if (!DEMO) try {
-          const trips = JSON.parse(localStorage.getItem("trips") || "[]");
+          const trips = JSON.parse(localStorage.getItem("trips:" + cartId) || "[]");
           shop.prev = trips[0] || null;
           trips.unshift({ t: Date.now(), n, min });
-          localStorage.setItem("trips", JSON.stringify(trips.slice(0, 20)));
+          localStorage.setItem("trips:" + cartId, JSON.stringify(trips.slice(0, 20)));
         } catch {}
       }
     }
@@ -827,14 +814,14 @@ try {
   if (!DEMO && !me && localStorage.getItem("meSkipped") !== "1") setTimeout(askName, 900);
 } catch {}
 
-// ---- Settings sheet: name, store order, connect devices, home screen, appearance ----
+// ---- Settings sheet: name, store order, invite, home screen, appearance ----
 const menuDialog = $("menu-dialog");
 // Open another dialog from the sheet: close the sheet first so only one is ever on screen.
 const fromMenu = (open) => () => { menuDialog.close(); open(); };
 $("menu-btn").addEventListener("click", () => menuDialog.showModal());
 $("menu-name").addEventListener("click", fromMenu(askName));
 $("menu-order").addEventListener("click", fromMenu(() => { renderOrderDialog(); orderDialog.showModal(); }));
-$("menu-connect").addEventListener("click", fromMenu(openConnect));
+$("menu-connect").addEventListener("click", fromMenu(() => carts.openInvite()));
 $("menu-install").addEventListener("click", fromMenu(showInstall));
 
 // Appearance: auto (follow the phone), light, dark. Stored per device.
@@ -877,24 +864,10 @@ $("swatches").replaceChildren(...THEMES.map((t) => {
 }));
 try { applyTheme(localStorage.getItem("theme")); } catch { applyTheme(); }
 
-// ---- Connect devices: WhatsApp link, copy, QR ----
-function openConnect() {
-  const url = location.href;
-  $("wa").href = "https://wa.me/?text=" + encodeURIComponent("הנה העגלה המשפחתית שלנו\n" + url);
-  const qrBox = $("qr");
-  try {
-    const qr = qrcode(0, "M");
-    qr.addData(url); qr.make();
-    qrBox.innerHTML = qr.createSvgTag({ cellSize: 4, margin: 0, scalable: true }); // library-generated SVG of our own URL
-    qrBox.hidden = false;
-  } catch { qrBox.hidden = true; }
-  $("connect-dialog").showModal();
-}
-$("copy-link").addEventListener("click", async () => {
-  try { await navigator.clipboard.writeText(location.href); $("copy-link").textContent = "הועתק"; }
-  catch { $("copy-link").textContent = "לא הצלחתי להעתיק"; }
-  setTimeout(() => { $("copy-link").textContent = "העתקת קישור"; }, 2000);
-});
+// ---- Carts: switcher, join by code, invite sheet (ui-carts.js) ----
+const carts = initCarts({ $, icon, toast, DEMO, cartId });
+if (boot.notice?.joined) toast(`הצטרפתם לעגלה "${boot.name}"`);
+else if (boot.notice?.error) toast(boot.notice.error);
 
 // ---- Add to home screen ----
 let installPrompt = null;
@@ -910,8 +883,8 @@ function showInstall() {
   }
   const ios = /iphone|ipad|ipod/i.test(navigator.userAgent);
   const steps = ios
-    ? ["פתחו את הקישור של העגלה ב-Safari.", "לחצו על כפתור השיתוף (ריבוע עם חץ) בתחתית המסך.", "גללו ובחרו \"הוספה למסך הבית\", ואשרו."]
-    : ["פתחו את הקישור של העגלה ב-Chrome.", "לחצו על שלוש הנקודות בפינה העליונה.", "בחרו \"התקנת אפליקציה\" או \"הוספה למסך הבית\"."];
+    ? ["פתחו את העגלה ב-Safari (לא מתוך וואטסאפ: לחצו על \"פתיחה ב-Safari\").", "לחצו על כפתור השיתוף (ריבוע עם חץ) בתחתית המסך.", "גללו ובחרו \"הוספה למסך הבית\", ואשרו.", "האייקון החדש פותח את העגלה שהייתם בה. כדי להוסיף עגלה נוספת, הצטרפו אליה מתוך האפליקציה עם הקוד."]
+    : ["פתחו את העגלה ב-Chrome.", "לחצו על שלוש הנקודות בפינה העליונה.", "בחרו \"התקנת אפליקציה\" או \"הוספה למסך הבית\".", "האייקון החדש פותח את העגלה שהייתם בה. כדי להוסיף עגלה נוספת, הצטרפו אליה מתוך האפליקציה עם הקוד."];
   $("install-steps").replaceChildren(...steps.map((s) => { const li = document.createElement("li"); li.textContent = s; return li; }));
   $("install-dialog").showModal();
 }

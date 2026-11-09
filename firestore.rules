@@ -92,5 +92,25 @@ service cloud.firestore {
                 || (request.resource.data.custom is list && request.resource.data.custom.size() <= 10)))
         );
     }
+
+    // Invite codes: a short-lived pointer from an 8-character code to a cart id. They exist so a person can
+    // join by scanning or typing a code instead of handling the 32-character link.
+    //  - get only, never list, so codes can't be enumerated; 32^8 (about 10^12) codes make guessing hopeless
+    //  - create only, never update or delete: an existing code can't be overwritten or hijacked (an expired one
+    //    just stays taken and the client picks another), and a code stops working by itself at `exp`
+    //  - `exp` is a millisecond timestamp at most 7 days ahead
+    match /invites/{code} {
+      allow get: if code.matches('^[2-9A-HJ-NP-Z]{8}$')
+        && resource.data.exp > request.time.toMillis();
+      allow create: if code.matches('^[2-9A-HJ-NP-Z]{8}$')
+        && request.resource.data.keys().hasOnly(['cartId', 'name', 'exp'])
+        && request.resource.data.cartId is string
+        && request.resource.data.cartId.matches('^[a-f0-9]{32}$')
+        && request.resource.data.exp is number
+        && request.resource.data.exp > request.time.toMillis()
+        && request.resource.data.exp <= request.time.toMillis() + 604800000
+        && (!('name' in request.resource.data)
+            || (request.resource.data.name is string && request.resource.data.name.size() <= 30));
+    }
   }
 }

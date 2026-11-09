@@ -16,7 +16,7 @@ if (DEMO) fs = await import("./demo-store.js");
 else [fs, app] = await Promise.all([import(SDK + "firebase-firestore.js"), import(SDK + "firebase-app.js")]);
 
 export const {
-  collection, doc, addDoc, updateDoc, deleteDoc, setDoc,
+  collection, doc, addDoc, updateDoc, deleteDoc, setDoc, getDoc,
   onSnapshot, query, orderBy, writeBatch, increment, deleteField,
 } = fs;
 

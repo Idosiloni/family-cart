@@ -17,6 +17,7 @@ Family WhatsApp groups are where shopping lists go to die: items get buried, bou
 ## Features
 
 - **Three quiet tabs.** *The list*, *our products* and *prices*. Settings (name, store order, connect devices, home screen, light/dark, colour) live behind one menu button. One accent colour, no gradients, no glow.
+- **Several carts, joined with a code.** One phone can hold many carts (home, the parents', friends); the cart name at the top switches between them. To invite someone, open the menu, *Invite to the cart*: it shows an 8-character code (`KFRT-4829`), a QR and a short `#join=` link, valid for 7 days. The other person scans, taps the link or types the code under *My carts*. The old 32-character link still works and is offered as a permanent fallback.
 - **Live sync.** Everyone with the cart link sees changes instantly. When someone else adds an item while your screen is open, a toast says who added what.
 - **Auto-sorting into supermarket sections.** A word-aware Hebrew classifier (with a catalog of Israeli products and brands) files each item under produce, dairy, bakery, and so on. Correct it once and the family's correction is remembered for every future item.
 - **Our products.** Everything the family ever adds is counted and kept. Tap `+` to add it again, pin the weekly regulars and add them all in one tap, change a product's section, or remove it. While typing, matching regulars appear above the keyboard.
@@ -26,7 +27,7 @@ Family WhatsApp groups are where shopping lists go to die: items get buried, bou
 - **Fast input.** Type several items at once, paste a whole WhatsApp-style list, or dictate by voice. Quantities (`חלב x3`) and notes are parsed out.
 - **Undo and swipe.** Tap the circle or swipe right to check an item off, swipe left to delete, tap the name to edit. Deleting can be undone from a toast.
 - **Share the list.** Send what's left, grouped by section, to WhatsApp or the system share sheet.
-- **Home screen.** A one-time banner and a settings entry walk each family member through "Add to home screen" (iOS and Android). The icon opens the exact cart: the manifest is built at runtime with the cart link as its start URL, and a small network-first service worker (never cache-first, so deploys are picked up at once) is registered. Install prompts depend on the browser; not yet verified on a real phone.
+- **Home screen.** To put the app on a phone's home screen: on iPhone open the cart in Safari (not inside WhatsApp), tap the share button, then *Add to Home Screen*; on Android open it in Chrome, tap the three dots, then *Install app* / *Add to home screen*. The same steps are in the app under the settings menu. A one-time banner and a settings entry walk each family member through "Add to home screen" (iOS and Android). The icon opens the exact cart: the manifest is built at runtime with the cart link as its start URL, and a small network-first service worker (never cache-first, so deploys are picked up at once) is registered. Install prompts depend on the browser; not yet verified on a real phone.
 
 | List (light) | Our products | Prices | Shopping mode |
 |---|---|---|---|
@@ -54,7 +55,7 @@ Israeli law makes the big chains publish a price file per branch. `scripts/build
 |---|---|
 | **No build step** | Plain ES modules served from `public/`. Open it with any static server. |
 | **Firestore** | One collection per cart: `carts/{id}/items` and `carts/{id}/receipts`, plus `settings/{prefs,learned,history,prices,stores}` for store order and theme, learned section corrections, "our products" (counts, pins), the family's own prices, and the chains being compared. |
-| **Access model** | The cart is the 128-bit random id in the URL hash (`#<32 hex>`). There are no accounts. See [Security](#security-model). |
+| **Access model** | The cart is the 128-bit random id in the URL hash (`#<32 hex>`). There are no accounts. Each device remembers its carts in `localStorage`; a short invite code (`invites/{code}`, 7 days) is a pointer to that id. See [Security](#security-model). |
 | **Classifier** | `categories.js` + `catalog*.js`: longest-keyword-wins matching that is word-aware, not substring (`מים` must be a whole word; `עגבני` matches the start of a word), plus brand names and per-family overrides. |
 | **Parsing** | `parse.js` splits pasted or spoken text into items and pulls out quantities. |
 | **Data layer** | `db.js` re-exports the Firestore calls the app uses. Open the page as `#demo` and it swaps in `demo-store.js`, an in-memory fake with the same surface, so the app can be demoed, screenshotted and tested with no backend. |
@@ -91,6 +92,7 @@ node scripts/screenshots.mjs docs
 
 ## Security model
 
+- Invite codes are 8 characters from a 32-symbol alphabet (40 bits), stored as `invites/{code}` holding only the cart id, a name and an expiry. The rules allow `get` but never `list`, allow `create` but never update or delete, and refuse an expired code, so a code can't be enumerated, overwritten or reused after a week. Anyone who has a valid code gets the cart, exactly like the link, so treat a code like the link while it lasts.
 - A cart is reachable only by knowing its id. The id is 128 bits of `crypto.getRandomValues`, the `carts` collection cannot be listed, and the rules only allow reads and writes under a path whose id is at least 16 characters. Ids cannot be enumerated or guessed.
 - `firestore.rules` also validates every write: allowed fields only, string and number length limits, quantity 1-99, and new items must start unchecked.
 - The Firebase `apiKey` in `firebase-config.js` is public by design; the rules are what protect the data.
@@ -104,6 +106,9 @@ public/
   index.html        markup and dialogs
   style.css         design tokens (light/dark, one accent), layout
   app.js            list, shopping mode, settings, realtime listeners
+  carts.js          pure: cart ids, invite codes, the device's list of carts
+  cart-boot.js      picks the cart to open at load; creates and resolves invite codes
+  ui-carts.js       the cart switcher, join/create/rename, the invite sheet
   ui-regulars.js    the "our products" tab
   ui-prices.js      the prices tab, price/receipt/chain dialogs
   regulars.js       pure: regulars, starters, quick-add suggestions
